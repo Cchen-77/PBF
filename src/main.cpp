@@ -3,12 +3,13 @@
 #include<chrono>
 #include"renderer.h"
 #include"preset_renderers.h"
+#include"renderer_types.h"
 int main(){
     try{
 #ifndef DEBUG
         Renderer renderer = Renderer(800,800);
 #else
-        Renderer renderer = Renderer(800,800,true,"textures/justagirl.png");
+        Renderer renderer = Renderer(800,800,RF_TEXTRUE,true,"textures/justagirl.png");
 #endif
         auto now = std::chrono::high_resolution_clock::now();
         PresetRenderers::Init_JustAGirl(&renderer);
@@ -16,8 +17,8 @@ int main(){
             auto last = now;
             now = std::chrono::high_resolution_clock::now();
             float deltatime = std::chrono::duration<float,std::chrono::seconds::period>(now-last).count();
-
             PresetRenderers::Tick_JustAGirl(&renderer,deltatime);
+            //PresetRenderers::Tick_JustAGirl(&renderer,deltatime);
             TickResult result = renderer.Tick(deltatime);
             switch (result)
             {

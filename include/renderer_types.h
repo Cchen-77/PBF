@@ -60,9 +60,41 @@ struct Vertex{
         return attributes;
     }
 };
+struct Particle{
+    glm::vec3 Location;
+    glm::vec3 Velocity;
+     static VkVertexInputBindingDescription GetBinding(){
+       VkVertexInputBindingDescription binding{};
+       binding.binding = 0;
+       binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+       binding.stride = sizeof(Particle);
+       return binding;
+    }
+    static std::array<VkVertexInputAttributeDescription,2> GetAttributes(){
+        std::array<VkVertexInputAttributeDescription,2> attributes;
+        attributes[0].binding = 0;
+        attributes[0].location = 0;
+        attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributes[0].offset = offsetof(Particle,Location);
+
+        attributes[1].binding = 0;
+        attributes[1].location = 1;
+        attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributes[1].offset = offsetof(Particle,Velocity);
+        return attributes;
+    }
+};
 struct UniformMVPObject{
     alignas(16) glm::mat4 model = glm::mat4(1.0f);
     alignas(16) glm::mat4 view = glm::mat4(1.0f);
     alignas(16) glm::mat4 projection = glm::mat4(1.0f);
+};
+struct UniformComputeObject{
+    alignas(4) float DeltaTime = 0.0f;
+};
+typedef uint32_t RendererFeaturesFlag;
+enum RendererFeaturesFlagBits{
+    RF_TEXTRUE = 0x1,
+    RF_PARTICLE = 0x2,
 };
 #endif
