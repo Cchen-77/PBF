@@ -27,7 +27,7 @@ enum class TickResult{
 struct Vertex{
     glm::vec3 Location;
     glm::vec3 Normal;
-    glm::vec4 Color;
+    glm::vec4 Color = glm::vec4(-1.0f,-1.0f,-1.0f,-1.0f);
     glm::vec2 TexCoord;
     static VkVertexInputBindingDescription GetBinding(){
        VkVertexInputBindingDescription binding{};
@@ -61,15 +61,22 @@ struct Vertex{
     }
 };
 struct Particle{
-    glm::vec3 Location;
-    glm::vec3 Velocity;
+    alignas(16) glm::vec3 Location;
+    alignas(16) glm::vec3 Velocity;
+    alignas(16) glm::vec3 DeltaLocation;
+    alignas(4) float Lambda;
+    alignas(4) float Density;
+    alignas(4) float Mass;
+    alignas(4) uint32_t IsFluid;
+
+    alignas(16) glm::vec3 TmpVelocity;
      static VkVertexInputBindingDescription GetBinding(){
        VkVertexInputBindingDescription binding{};
        binding.binding = 0;
        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
        binding.stride = sizeof(Particle);
        return binding;
-    }
+    } 
     static std::array<VkVertexInputAttributeDescription,2> GetAttributes(){
         std::array<VkVertexInputAttributeDescription,2> attributes;
         attributes[0].binding = 0;
@@ -79,8 +86,8 @@ struct Particle{
 
         attributes[1].binding = 0;
         attributes[1].location = 1;
-        attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[1].offset = offsetof(Particle,Velocity);
+        attributes[1].format = VK_FORMAT_R32_UINT;
+        attributes[1].offset = offsetof(Particle,IsFluid);
         return attributes;
     }
 };
@@ -91,6 +98,10 @@ struct UniformMVPObject{
 };
 struct UniformComputeObject{
     alignas(4) float DeltaTime = 0.0f;
+    alignas(4) float RestDensity = 0.0f;
+    alignas(4) float SphRadius;
+    alignas(4) uint32_t NumFluids;
+    alignas(4) uint32_t NumParticles;
 };
 typedef uint32_t RendererFeaturesFlag;
 enum RendererFeaturesFlagBits{

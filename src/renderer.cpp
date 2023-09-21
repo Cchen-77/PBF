@@ -14,9 +14,7 @@
 #include<algorithm>
 
 
-
 #define Allocator nullptr
-
 VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, 
 const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData)
 {
@@ -64,7 +62,7 @@ VkCommandBuffer Renderer::CreateCommandBuffer()
     }
     return cb;
 }
-void Renderer::SubmitCommandBuffer(VkCommandBuffer cb,VkSubmitInfo submitinfo,VkFence fence)
+void Renderer::SubmitCommandBuffer(VkCommandBuffer& cb,VkSubmitInfo submitinfo,VkFence fence)
 {
     submitinfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitinfo.commandBufferCount = 1;
@@ -75,7 +73,7 @@ void Renderer::SubmitCommandBuffer(VkCommandBuffer cb,VkSubmitInfo submitinfo,Vk
     if(vkQueueSubmit(GraphicNComputeQueue,1,&submitinfo,fence)!=VK_SUCCESS){
         throw std::runtime_error("failed to submit command buffer!");
     }
-    vkQueueWaitIdle(GraphicNComputeQueue);
+    vkDeviceWaitIdle(LDevice);
     vkFreeCommandBuffers(LDevice,CommandPool,1,&cb);
 }
 void Renderer::CreateBuffer(VkBuffer &buffer, VkDeviceMemory &memory,VkDeviceSize size,VkBufferUsageFlags usage,VkMemoryPropertyFlags mempropperties)
@@ -219,26 +217,67 @@ VkImageView Renderer::CreateImageView(VkImage image, VkFormat format, VkImageAsp
     }
     return imageview;
 }
-void Renderer::SetMVP(glm::mat4 &model, glm::mat4 &view, glm::mat4 &projection)
+void Renderer::SetMVP(glm::mat4 &model, glm::mat4 &view, glm::mat4 &projection,bool init)
 {
-    vkDeviceWaitIdle(LDevice);
+    if(!init)   vkDeviceWaitIdle(LDevice);
     mvp.model = model;
     mvp.view = view;
     mvp.projection = projection;
-    memcpy(MappedMVPBuffer,&mvp,sizeof(mvp));
+    if(!init){
+        memcpy(MappedMVPBuffer,&mvp,sizeof(mvp));
+    }
 }
-Renderer::Renderer(uint32_t w, uint32_t h, RendererFeaturesFlag feature,bool validation,std::string texfile)
+void Renderer::SetParticles(const std::vector<Particle> &ps,bool init)
+{
+    if(!init)   vkDeviceWaitIdle(LDevice);
+    if(ps.size()!=particles.size()){
+        particles.clear();
+        particles.assign(ps.begin(),ps.end());
+        if(!init){
+            for(uint32_t i=0;i<MAXInFlightRendering;++i){
+                CleanupBuffer(ParticleBuffers[i],ParticleBufferMemory[i],true);
+            }
+            CreateParticleBuffer();
+        }
+    }
+    else{
+        particles.clear();
+        particles.assign(ps.begin(),ps.end());
+        if(!init){
+            //set particle will update the state of last frame,and current frame will update acroding to last frame!
+            memcpy(MappedParticleBufferMemory[CurrentFlight],particles.data(),particles.size()*sizeof(Particle));
+        }
+    }
+    if(!init)   vkDeviceWaitIdle(LDevice);
+}
+void Renderer::SetComputeUbo(const UniformComputeObject &ubo,bool init)
+{
+    if(!init) vkDeviceWaitIdle(LDevice);
+    computeobj = ubo;
+    if(!init){
+        memcpy(MappedComputeBuffer,&computeobj,sizeof(computeobj));
+    }
+    if(!init)   vkDeviceWaitIdle(LDevice);
+}
+void Renderer::GetParticles(std::vector<Particle> &ps)
+{
+    vkWaitForFences(LDevice,1,&ComputingFinishFence,VK_TRUE,UINT64_MAX);
+    memcpy(particles.data(),MappedParticleBufferMemory[CurrentFlight],particles.size()*sizeof(Particle));
+    ps.clear();
+    ps.assign(particles.begin(),particles.end());
+}
+Renderer::Renderer(uint32_t w, uint32_t h, RendererFeaturesFlag feature, bool validation, std::string texfile)
 {
     Width = w;
     Height = h;   
     FeatureFlag = feature;
     bEnableValidation = validation;
     texturefile = texfile;
-    Init();
+
 }
 Renderer::~Renderer()
 {
-    Cleanup();
+
 }
 void Renderer::Init()
 {
@@ -291,7 +330,11 @@ void Renderer::Cleanup()
 {
     vkDeviceWaitIdle(LDevice);
     if(FeatureFlag&RF_PARTICLE){
-        vkDestroyPipeline(LDevice,ComputePipeline,Allocator);
+        vkDestroyPipeline(LDevice,ComputePipeline_Euler,Allocator);
+        vkDestroyPipeline(LDevice,ComputePipeline_Lambda,Allocator);
+        vkDestroyPipeline(LDevice,ComputePipeline_DeltaPosition,Allocator);
+        vkDestroyPipeline(LDevice,ComputePipeline_PositionUpd,Allocator);
+        vkDestroyPipeline(LDevice,ComputePipeline_VelocityUpd,Allocator);
         vkDestroyPipelineLayout(LDevice,ComputePipelineLayout,Allocator);
     }
     vkDestroyPipeline(LDevice,GraphicPipeline,Allocator);
@@ -328,7 +371,7 @@ void Renderer::Cleanup()
     //========================================================
     if(FeatureFlag&RF_PARTICLE){
         for(uint32_t i=0;i<MAXInFlightRendering;++i){
-            CleanupBuffer(ParticleBuffers[i],ParticleBufferMemory[i],false);
+            CleanupBuffer(ParticleBuffers[i],ParticleBufferMemory[i],true);
         }
         CleanupBuffer(UniformComputeBuffer,UniformComputeBufferMemory,true);
     }
@@ -402,37 +445,40 @@ void Renderer::GetMSAASampleCount()
     MSAASampleCount = VK_SAMPLE_COUNT_1_BIT;
     return;
 }
-void Renderer::CreateSupportObjects()
-{
-    RenderingFinish.resize(MAXInFlightRendering);
-    ImageAvaliable.resize(MAXInFlightRendering);
-    InFlightFences.resize(MAXInFlightRendering);
-    for(uint32_t i=0;i<MAXInFlightRendering;++i){
-        VkSemaphoreCreateInfo seminfo{};
-        seminfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        seminfo.flags = VK_SEMAPHORE_TYPE_BINARY;
-        if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&ImageAvaliable[i])!=VK_SUCCESS){
-            throw std::runtime_error("failed to create sem:imageavaliable!");
-        }
-        if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&RenderingFinish[i])!=VK_SUCCESS){
-            throw std::runtime_error("failed to create sem:renderingfinish!");
-        }
-        VkFenceCreateInfo fenceinfo{};
-        fenceinfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceinfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        if(vkCreateFence(LDevice,&fenceinfo,Allocator,&InFlightFences[i])!=VK_SUCCESS){
-            throw std::runtime_error("failed to create fence:inflight!");
-        }
+void Renderer::CreateSupportObjects(){
 
+    VkSemaphoreCreateInfo seminfo{};
+    seminfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    seminfo.flags = VK_SEMAPHORE_TYPE_BINARY;
+    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&ImageAvaliable)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create sem:imageavaliable!");
     }
+    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&RenderingFinish)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create sem:renderingfinish!");
+    }
+    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&ComputingFinish)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create sem:computingfinish!");
+    }
+    VkFenceCreateInfo fenceinfo{};
+    fenceinfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceinfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    if(vkCreateFence(LDevice,&fenceinfo,Allocator,&InFlightFences)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create fence:inflight!");
+    }
+    if(vkCreateFence(LDevice,&fenceinfo,Allocator,&ComputingFinishFence)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create fence:computingfinish!");
+    }
+
 }
 void Renderer::CleanupSupportObjects()
 {
-    for(uint32_t i=0;i<MAXInFlightRendering;++i){
-        vkDestroySemaphore(LDevice,ImageAvaliable[i],Allocator);
-        vkDestroySemaphore(LDevice,RenderingFinish[i],Allocator);
-        vkDestroyFence(LDevice,InFlightFences[i],Allocator);
-    }
+
+    vkDestroySemaphore(LDevice,ImageAvaliable,Allocator);
+    vkDestroySemaphore(LDevice,RenderingFinish,Allocator);
+    vkDestroySemaphore(LDevice,ComputingFinish,Allocator);
+    vkDestroyFence(LDevice,InFlightFences,Allocator);
+    vkDestroyFence(LDevice,ComputingFinishFence,Allocator);
+    
 }
 void Renderer::CreateDebugMessenger()
 {
@@ -555,34 +601,16 @@ void Renderer::CreateIndexBuffer()
 
 void Renderer::CreateParticleBuffer()
 {
-    std::vector<Particle> InitParticle(ParticleCount);
-    //========================================================
-    //              TODO:INIT THE PARTICLE
-    //========================================================
-
     ParticleBufferMemory.resize(MAXInFlightRendering);
     ParticleBuffers.resize(MAXInFlightRendering);
-    VkDeviceSize size = ParticleCount*sizeof(Particle);
-    VkBuffer stagingbuffer;
-    VkDeviceMemory stagingmemory;
-    CreateBuffer(stagingbuffer,stagingmemory,size,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    void* data;
-    vkMapMemory(LDevice,stagingmemory,0,size,0,&data);
-    memcpy(data,indexs.data(),size);
-    VkBufferCopy region{};
-    region.srcOffset = 0;
-    region.dstOffset = 0;
-    region.size = size;
-    auto cb = CreateCommandBuffer();
+    MappedParticleBufferMemory.resize(MAXInFlightRendering);
+    VkDeviceSize size = particles.size()*sizeof(Particle);
     for(uint32_t i=0;i<MAXInFlightRendering;++i){
         CreateBuffer(ParticleBuffers[i],ParticleBufferMemory[i],size,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        vkCmdCopyBuffer(cb,stagingbuffer,ParticleBuffers[i],1,&region);
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkMapMemory(LDevice,ParticleBufferMemory[i],0,size,0,&MappedParticleBufferMemory[i]);
+        memcpy(MappedParticleBufferMemory[i],particles.data(),size);
     }
-    VkSubmitInfo submitinfo{};
-    SubmitCommandBuffer(cb,submitinfo,VK_NULL_HANDLE);
-    CleanupBuffer(stagingbuffer,stagingmemory,true);
 }
 
 void Renderer::CreateUniformMVPBuffer()
@@ -600,8 +628,10 @@ void Renderer::CreateUniformComputeBuffer()
     CreateBuffer(UniformComputeBuffer,UniformComputeBufferMemory,size,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     vkMapMemory(LDevice,UniformComputeBufferMemory,0,size,0,&MappedComputeBuffer);
-    memcpy(MappedComputeBuffer,&mvp,size);
+    memcpy(MappedComputeBuffer,&computeobj,size);
 }
+
+
 
 void Renderer::CreateTextureResources()
 {
@@ -911,7 +941,7 @@ void Renderer::CreateDescriptorSet()
     cwrites[2].descriptorCount = 1;
     cwrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     cwrites[2].dstArrayElement = 0;
-    cwrites[2].dstBinding = 1;
+    cwrites[2].dstBinding = 2;
     for(uint32_t i=0;i<MAXInFlightRendering;++i){
         VkDescriptorBufferInfo computeobjbufferinfo{};
         computeobjbufferinfo.buffer = UniformComputeBuffer;
@@ -920,18 +950,18 @@ void Renderer::CreateDescriptorSet()
         VkDescriptorBufferInfo particlebufferinfo_thisframe{};
         particlebufferinfo_thisframe.buffer = ParticleBuffers[i];
         particlebufferinfo_thisframe.offset = 0;
-        particlebufferinfo_thisframe.range = sizeof(Particle)*ParticleCount;
+        particlebufferinfo_thisframe.range = sizeof(Particle)*particles.size();
         VkDescriptorBufferInfo particlebufferinfo_lastframe{};
         particlebufferinfo_lastframe.buffer = ParticleBuffers[(i-1)%MAXInFlightRendering];
         particlebufferinfo_lastframe.offset = 0;
-        particlebufferinfo_lastframe.range = sizeof(Particle)*ParticleCount;
+        particlebufferinfo_lastframe.range = sizeof(Particle)*particles.size();
         
         cwrites[0].dstSet = ComputeDescriptorSet[i];
         cwrites[0].pBufferInfo = &computeobjbufferinfo;
         cwrites[1].dstSet = ComputeDescriptorSet[i];
-        cwrites[1].pBufferInfo = &particlebufferinfo_thisframe;
+        cwrites[1].pBufferInfo = &particlebufferinfo_lastframe;
         cwrites[2].dstSet = ComputeDescriptorSet[i];
-        cwrites[2].pBufferInfo =  &particlebufferinfo_lastframe;
+        cwrites[2].pBufferInfo =  &particlebufferinfo_thisframe;
 
         vkUpdateDescriptorSets(LDevice,cwrites.size(),cwrites.data(),0,nullptr);
     }
@@ -1030,8 +1060,8 @@ void Renderer::CreateGraphicPipeline()
 
     VkPipelineVertexInputStateCreateInfo vertexinput{};
     vertexinput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    auto vertexinputbinding = Vertex::GetBinding();
-    auto vertexinputattributs = Vertex::GetAttributes();
+    auto vertexinputbinding = Particle::GetBinding();
+    auto vertexinputattributs = Particle::GetAttributes();
     vertexinput.vertexBindingDescriptionCount = 1;
     vertexinput.pVertexBindingDescriptions = &vertexinputbinding;
     vertexinput.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexinputattributs.size());
@@ -1040,7 +1070,7 @@ void Renderer::CreateGraphicPipeline()
     VkPipelineInputAssemblyStateCreateInfo inputassmbly{};
     inputassmbly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputassmbly.primitiveRestartEnable = VK_FALSE;
-    inputassmbly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputassmbly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
     
     VkPipelineViewportStateCreateInfo viewport{};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1053,11 +1083,11 @@ void Renderer::CreateGraphicPipeline()
 
     VkPipelineRasterizationStateCreateInfo rasterization{};
     rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterization.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterization.cullMode = VK_CULL_MODE_NONE;
     rasterization.depthClampEnable = VK_FALSE;
     rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterization.lineWidth = 1.0f;
-    rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterization.polygonMode = VK_POLYGON_MODE_POINT;
 
     VkPipelineDepthStencilStateCreateInfo depthstencil{};
     depthstencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1113,20 +1143,39 @@ void Renderer::CreateComputePipelineLayout()
 }
 void Renderer::CreateComputePipeline()
 {
-    auto computershadermodule = MakeShaderModule("shaders/spv/compshader.spv");
-    VkPipelineShaderStageCreateInfo stageinfo{};
-    stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    stageinfo.pName = "main";
-    stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    stageinfo.module = computershadermodule;
-    VkComputePipelineCreateInfo createinfo{};
-    createinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    createinfo.layout = ComputePipelineLayout;
-    createinfo.stage = stageinfo;
-    if(vkCreateComputePipelines(LDevice,VK_NULL_HANDLE,1,&createinfo,Allocator,&ComputePipeline)!=VK_SUCCESS){
-        throw std::runtime_error("failed to create compute pipeline!");
+    auto computershadermodule_euler = MakeShaderModule("shaders/spv/compshader_euler.spv");
+    auto computershadermodule_lambda = MakeShaderModule("shaders/spv/compshader_lambda.spv");
+    auto computershadermodule_deltaposition = MakeShaderModule("shaders/spv/compshader_deltaposition.spv");
+    auto computershadermodule_positionupd = MakeShaderModule("shaders/spv/compshader_positionupd.spv");
+    auto computershadermodule_velocityupd = MakeShaderModule("shaders/spv/compshader_velocityupd.spv");
+    auto computershadermodule_velocitycache = MakeShaderModule("shaders/spv/compshader_velocitycache.spv");
+    auto computershadermodule_vicositycorr = MakeShaderModule("shaders/spv/compshader_vicositycorr.spv");
+    auto computershadermodule_vorticitycorr = MakeShaderModule("shaders/spv/compshader_vorticitycorr.spv");
+
+    std::vector<VkShaderModule> shadermodules = {computershadermodule_euler,computershadermodule_lambda,computershadermodule_deltaposition,
+    computershadermodule_positionupd,computershadermodule_velocityupd,computershadermodule_velocitycache,
+    computershadermodule_vicositycorr,computershadermodule_vorticitycorr};
+    std::vector<VkPipeline*> pcomputepipelines = {&ComputePipeline_Euler,&ComputePipeline_Lambda,&ComputePipeline_DeltaPosition,
+    &ComputePipeline_PositionUpd,&ComputePipeline_VelocityUpd, 
+    &ComputePipeline_VelocityCache,&ComputePipeline_VicosityCorr, &ComputePipeline_VorticityCorr};
+
+    for(uint32_t i=0;i<shadermodules.size();++i){
+        VkPipelineShaderStageCreateInfo stageinfo{};
+        stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stageinfo.pName = "main";
+        stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stageinfo.module = shadermodules[i];
+        VkComputePipelineCreateInfo createinfo{};
+        createinfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        createinfo.layout = ComputePipelineLayout;
+        createinfo.stage = stageinfo;
+        if(vkCreateComputePipelines(LDevice,VK_NULL_HANDLE,1,&createinfo,Allocator,pcomputepipelines[i])!=VK_SUCCESS){
+            throw std::runtime_error("failed to create compute pipeline!");
+        }
     }
-    vkDestroyShaderModule(LDevice,computershadermodule,Allocator);
+    for(auto& computershadermodule:shadermodules){
+        vkDestroyShaderModule(LDevice,computershadermodule,Allocator);
+    }
     
 }
 void Renderer::CreateFramebuffers()
@@ -1243,6 +1292,7 @@ void Renderer::GetRequestDeviceFeature(VkPhysicalDeviceFeatures& features)
 {
     features = VkPhysicalDeviceFeatures();
     features.samplerAnisotropy = VK_TRUE;
+    features.fillModeNonSolid = VK_TRUE;
     
 }
 SurfaceDetails Renderer::GetSurfaceDetails()
@@ -1297,91 +1347,152 @@ TickResult Renderer::Tick(float DeltaTime)
     }
     return TickResult::NONE;
 }
+void Renderer::Simulate()
+{
+    CurrentFlight = (CurrentFlight + 1)%MAXInFlightRendering; 
+    
+    uint64_t notimeout = UINT64_MAX;
+    int T = 5;
+    vkWaitForFences(LDevice,1,&InFlightFences,VK_TRUE,notimeout);
+    vkWaitForFences(LDevice,1,&ComputingFinishFence,VK_TRUE,notimeout);
+    vkResetFences(LDevice,1,&ComputingFinishFence);
+
+    auto cb_compute = CreateCommandBuffer();
+    VkMemoryBarrier memorybarrier{};
+    memorybarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    memorybarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    memorybarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdBindDescriptorSets(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipelineLayout,0,1,&ComputeDescriptorSet[CurrentFlight],0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_Euler);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);
+    while(T--){
+        
+        vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+        ,0,nullptr,0,nullptr);
+        vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_Lambda);
+        vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);
+
+        vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+        ,0,nullptr,0,nullptr);
+        vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_DeltaPosition);
+        vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);    
+
+        vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+        ,0,nullptr,0,nullptr);
+        vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_PositionUpd);
+        vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);  
+
+    }
+    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+    ,0,nullptr,0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_VelocityUpd);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);   
+
+    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+    ,0,nullptr,0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_VelocityCache);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);  
+
+    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+    ,0,nullptr,0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_VicosityCorr);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);  
+
+    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+    ,0,nullptr,0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_VelocityCache);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);  
+
+    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
+    ,0,nullptr,0,nullptr);
+    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,ComputePipeline_VorticityCorr);
+    vkCmdDispatch(cb_compute,particles.size()/128+1,1,1);  
+
+
+
+    VkSubmitInfo compute_submitinfo{};
+    compute_submitinfo.signalSemaphoreCount = 1;
+    compute_submitinfo.pSignalSemaphores = &ComputingFinish;
+    SubmitCommandBuffer(cb_compute,compute_submitinfo,ComputingFinishFence);
+}
 void Renderer::Draw()
 {
-    uint64_t notimeout = UINT32_MAX;
-    vkWaitForFences(LDevice,1,&InFlightFences[CurrentFlight],VK_TRUE,notimeout);
-    uint32_t imageindex;
-    auto result = vkAcquireNextImageKHR(LDevice,SwapChain,notimeout,ImageAvaliable[CurrentFlight],VK_NULL_HANDLE,&imageindex);
-    if(result==VK_ERROR_OUT_OF_DATE_KHR||result == VK_SUBOPTIMAL_KHR || bFramebufferResized){
-        bFramebufferResized = false;
-        RecreateSwapChain();
-        return;
-    }
-    else if(result!=VK_SUCCESS){
-        throw std::runtime_error("failed to acquire image!");
-    }
-    vkResetFences(LDevice,1,&InFlightFences[CurrentFlight]);
-    auto cb = CreateCommandBuffer();
+    uint64_t notimeout = UINT64_MAX;
+    VkResult result;
+    vkWaitForFences(LDevice,1,&InFlightFences,VK_TRUE,notimeout);
+    
+    uint32_t image_idx;
+    
+    result = vkAcquireNextImageKHR(LDevice,SwapChain,notimeout,ImageAvaliable,VK_NULL_HANDLE,&image_idx);
+
+    vkResetFences(LDevice,1,&InFlightFences);
+    auto cb_graphic = CreateCommandBuffer();
+    VkRenderPassBeginInfo renderpass_begininfo{};
+    renderpass_begininfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderpass_begininfo.framebuffer = SwapChainFramebuffers[image_idx];
     std::array<VkClearValue,3> clearvalues{};
     clearvalues[0].color = {{0,0,0,1}};
     clearvalues[1].depthStencil = {1};
     clearvalues[2].color = {{0,0,0,1}};
-    VkRenderPassBeginInfo renderpassbegininfo{};
-    renderpassbegininfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderpassbegininfo.renderArea.offset = {0,0};
-    renderpassbegininfo.renderArea.extent = SwapChainImageExtent;
-    renderpassbegininfo.clearValueCount = static_cast<uint32_t>(clearvalues.size());
-    renderpassbegininfo.pClearValues = clearvalues.data();
-    renderpassbegininfo.renderPass = GraphicRenderPass;
-    renderpassbegininfo.framebuffer = SwapChainFramebuffers[imageindex];
-
-    vkCmdBeginRenderPass(cb,&renderpassbegininfo,VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,GraphicPipeline);
-    VkViewport viewport{};
+    renderpass_begininfo.clearValueCount = static_cast<uint32_t>(clearvalues.size());
+    renderpass_begininfo.pClearValues = clearvalues.data();
+    renderpass_begininfo.renderPass = GraphicRenderPass;
+    renderpass_begininfo.renderArea.extent = SwapChainImageExtent;
+    renderpass_begininfo.renderArea.offset = {0,0};
+    
+    vkCmdBeginRenderPass(cb_graphic,&renderpass_begininfo,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cb_graphic,VK_PIPELINE_BIND_POINT_GRAPHICS,GraphicPipeline);
+    VkViewport viewport;
+    viewport.height = SwapChainImageExtent.height;
+    viewport.width = SwapChainImageExtent.width;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    viewport.width = SwapChainImageExtent.width;
-    viewport.height = SwapChainImageExtent.height;
-    viewport.x = viewport.y = 0.0f;
-    vkCmdSetViewport(cb,0,1,&viewport);
-    VkRect2D scissor{};
-    scissor.extent = SwapChainImageExtent;
+    viewport.x = viewport.y = 0;
+    VkRect2D scissor;
     scissor.offset = {0,0};
-    vkCmdSetScissor(cb,0,1,&scissor);
+    scissor.extent = SwapChainImageExtent;
+    vkCmdSetViewport(cb_graphic,0,1,&viewport);
+    vkCmdSetScissor(cb_graphic,0,1,&scissor);
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cb,0,1,&VertexBuffer,&offset);
-    vkCmdBindIndexBuffer(cb,IndexBuffer,0,VK_INDEX_TYPE_UINT32);
-    vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,GraphicPipelineLayout,0,1,&GraphicDescriptorSet,0,nullptr);
-    vkCmdDrawIndexed(cb,indexs.size(),1,0,0,0);
-    vkCmdEndRenderPass(cb);
+    vkCmdBindVertexBuffers(cb_graphic,0,1,&ParticleBuffers[CurrentFlight],&offset);
+    vkCmdBindDescriptorSets(cb_graphic,VK_PIPELINE_BIND_POINT_GRAPHICS,GraphicPipelineLayout,0,1,&GraphicDescriptorSet,0,nullptr);
+    vkCmdDraw(cb_graphic,particles.size(),1,0,0);
+    vkCmdEndRenderPass(cb_graphic);
 
-    std::vector<VkSemaphore> signalsems = {RenderingFinish[CurrentFlight]};
-    std::vector<VkSemaphore> waitsems = {ImageAvaliable[CurrentFlight]};
-    std::vector<VkPipelineStageFlags> waitstages = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-    VkSubmitInfo submitinfo{};
-    submitinfo.signalSemaphoreCount = static_cast<uint32_t>(signalsems.size());
-    submitinfo.pSignalSemaphores = signalsems.data();
-    submitinfo.waitSemaphoreCount = static_cast<uint32_t>(waitsems.size());
-    submitinfo.pWaitSemaphores = waitsems.data();
-    submitinfo.pWaitDstStageMask = waitstages.data();
-    SubmitCommandBuffer(cb,submitinfo,InFlightFences[CurrentFlight]);
+    VkSubmitInfo graphic_submitinfo{};    
+    graphic_submitinfo.pSignalSemaphores = &RenderingFinish;;
+    graphic_submitinfo.signalSemaphoreCount = 1;
+    std::array<VkPipelineStageFlags,2> waitstages = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
+    std::array<VkSemaphore,2> waitsems = {ImageAvaliable,ComputingFinish};
+    graphic_submitinfo.waitSemaphoreCount = static_cast<uint32_t>(waitsems.size());
+    graphic_submitinfo.pWaitSemaphores = waitsems.data();
+    graphic_submitinfo.pWaitDstStageMask = waitstages.data();
+
+    SubmitCommandBuffer(cb_graphic,graphic_submitinfo,InFlightFences);
 
     VkPresentInfoKHR presentinfo{};
     presentinfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentinfo.swapchainCount = 1;
     presentinfo.pSwapchains = &SwapChain;
-    presentinfo.pImageIndices = &imageindex;
+    presentinfo.pWaitSemaphores = &RenderingFinish;
     presentinfo.waitSemaphoreCount = 1;
-    presentinfo.pWaitSemaphores = &RenderingFinish[CurrentFlight];
+    presentinfo.pImageIndices = &image_idx;
     result = vkQueuePresentKHR(PresentQueue,&presentinfo);
-    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || bFramebufferResized){
-        bFramebufferResized = false;
+    if(result != VK_SUCCESS||bFramebufferResized){
         RecreateSwapChain();
         return;
-    } 
-    else if(result!=VK_SUCCESS){
-        throw std::runtime_error("failed to present image!");
     }
-    CurrentFlight = (CurrentFlight + 1)%MAXInFlightRendering;
+
 }
-void Renderer::SetVertices(const std::vector<Vertex> &vs,const std::vector<uint32_t>& is)
+void Renderer::SetVertices(const std::vector<Vertex> &vs,const std::vector<uint32_t>& is,bool init)
 {
-    vkDeviceWaitIdle(LDevice);
+    if(!init) vkDeviceWaitIdle(LDevice);
     vertices.assign(vs.begin(),vs.end());
     indexs.assign(is.begin(),is.end());
-    CleanupBuffer(VertexBuffer,VertexBufferMemory,false);
-    CleanupBuffer(IndexBuffer,IndexBufferMemory,false);
-    CreateVertexBuffer();
-    CreateIndexBuffer();
+    if(!init){
+        CleanupBuffer(VertexBuffer,VertexBufferMemory,false);
+        CleanupBuffer(IndexBuffer,IndexBufferMemory,false);
+        CreateVertexBuffer();
+        CreateIndexBuffer();
+    }
 }

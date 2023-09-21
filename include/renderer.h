@@ -1,6 +1,8 @@
 #ifndef RENDER_H
 #define RENDER_H
 #define GLFW_INCLUDE_VULKAN
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_RADIANS
 #include"GLFW/glfw3.h"
 #include"glm/glm.hpp"
 #include"renderer_types.h"
@@ -16,10 +18,11 @@ public:
     virtual ~Renderer();
 public:
     TickResult Tick(float DeltaTime);
-    void Draw();
-private:
     void Init();
     void Cleanup();
+public:
+    void Simulate();
+    void Draw();
 private:
     void CreateInstance();
     void CreateDebugMessenger();
@@ -76,7 +79,7 @@ private:
     VkShaderModule MakeShaderModule(const char* filename);
 
     VkCommandBuffer CreateCommandBuffer();
-    void SubmitCommandBuffer(VkCommandBuffer cb,VkSubmitInfo submitinfom,VkFence fence);
+    void SubmitCommandBuffer(VkCommandBuffer& cb,VkSubmitInfo submitinfom,VkFence fence);
 
     void CreateBuffer(VkBuffer& buffer,VkDeviceMemory& memory,VkDeviceSize size,VkBufferUsageFlags usage,VkMemoryPropertyFlags memproperties);
     uint32_t ChooseMemoryType(uint32_t typefilter,VkMemoryPropertyFlags properties);
@@ -115,11 +118,22 @@ private:
     VkDescriptorSetLayout ComputeDescriptorSetLayout;
     std::vector<VkDescriptorSet> ComputeDescriptorSet;
     VkPipelineLayout ComputePipelineLayout;
-    VkPipeline ComputePipeline;
+    VkPipeline ComputePipeline_Euler;
+    VkPipeline ComputePipeline_Lambda;
+    VkPipeline ComputePipeline_DeltaPosition;
+    VkPipeline ComputePipeline_PositionUpd;
+    VkPipeline ComputePipeline_VelocityUpd;
+    VkPipeline ComputePipeline_VelocityCache;
+    VkPipeline ComputePipeline_VicosityCorr;
+    VkPipeline ComputePipeline_VorticityCorr;
+    
 
-    std::vector<VkFence> InFlightFences;
-    std::vector<VkSemaphore> ImageAvaliable;
-    std::vector<VkSemaphore> RenderingFinish;
+    VkFence InFlightFences;
+    VkSemaphore ImageAvaliable;
+    VkSemaphore RenderingFinish;
+    VkSemaphore ComputingFinish;
+    VkFence ComputingFinishFence;
+    
 
     VkBuffer VertexBuffer;
     VkDeviceMemory VertexBufferMemory;
@@ -132,6 +146,8 @@ private:
     VkBuffer UniformComputeBuffer;
     VkDeviceMemory UniformComputeBufferMemory;
     void* MappedComputeBuffer;
+    VkBuffer UniformVoxelBuffer;
+    VkDeviceMemory UniformVoxelBufferMemory;
 
     VkImage TextureImage;
     VkDeviceMemory TextureImageMemory;
@@ -150,10 +166,15 @@ private:
 
     std::vector<VkBuffer> ParticleBuffers;
     std::vector<VkDeviceMemory> ParticleBufferMemory;
+    std::vector<void*> MappedParticleBufferMemory;
 
 public:
-    void SetVertices(const std::vector<Vertex>& vs, const std::vector<uint32_t>& is);
-    void SetMVP(glm::mat4& model,glm::mat4& view,glm::mat4& projection);
+    void SetVertices(const std::vector<Vertex>& vs, const std::vector<uint32_t>& is,bool init);
+    void SetMVP(glm::mat4& model,glm::mat4& view,glm::mat4& projection,bool init);
+    void SetParticles(const std::vector<Particle>& ps,bool init);
+    void SetComputeUbo(const UniformComputeObject& ubo,bool init);
+public:
+    void GetParticles(std::vector<Particle>& ps);
 private:
     RendererFeaturesFlag FeatureFlag;
     uint32_t Width;
@@ -165,15 +186,22 @@ private:
         {{0.5,0.5,0},{},{},{1,1}}
     };
     std::vector<uint32_t> indexs ={
-        0,1,2,0,2,3
+        0,1,2
     };
+    std::vector<Particle> particles = {
+        {{0.5,-0.5,0}},
+        {{-0.5,-0.5,0}},
+        {{-0.5,0.5,0}},
+    };
+
+
     UniformMVPObject mvp;
     UniformComputeObject computeobj;
     bool bEnableValidation = false;
     uint32_t CurrentFlight = 0;
     uint32_t MAXInFlightRendering = 2;
     std::string texturefile = "";    
-    uint32_t ParticleCount = 10;
+
 
      bool bFramebufferResized = false;
 };

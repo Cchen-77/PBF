@@ -1,0 +1,173 @@
+#version 450
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+    uint IsFluid;
+
+    vec3 TmpVelocity;
+};
+layout(binding=0) uniform ComputeObj{
+    float DeltaTime;
+    float RestDensity;
+    float SphRadius;
+    uint NumFluids;
+    uint NumParticles;
+} cobj;
+layout(std140,binding=1) readonly buffer ParticleSSBOIn{
+    Particle particlesIn[];
+};
+layout(std140,binding=2) buffer ParticleSSBOout{
+    Particle particlesout[];
+};
+layout(local_size_x=128,local_size_y=1,local_size_z=1) in;
+uint ngbrs[10001];
+uint count;
+uint index;
+float PI = 3.1415926;
+
+float W_Poly6(vec3 r,float h)
+{
+    float ret = 0.0;
+	float rl = length(r);
+	float q = rl / h;
+	float h3 = h * h * h;
+	if (q <= 0.5)
+	{
+		float q2 = q * q;
+		float q3 = q2 * q;
+		ret = 8.0 / (PI * h3) * (6.0 * q3 - 6.0 * q2 + 1.0);
+	}
+	else
+	{
+		ret = 16.0 / (PI * h3) * pow(1 - q, 3.0);
+	}
+	return ret;
+}
+float W_Spiky(vec3 r,float h)
+{
+    float coeff = 15.0f/(PI*pow(h,6));
+    float rlength = length(r);
+    if(rlength<0||rlength>h) return 0.0f;
+    float diff = h-rlength;
+    float diff3 = diff*diff*diff;
+    return coeff*diff3;
+}
+vec3 Grad_W_Spiky(vec3 r,float h)
+{
+    vec3 ret = {0,0,0};
+	float rl = length(r);
+	float q = rl / h;
+	float h3 = h * h * h;
+	if (rl > 1.0e-6)
+	{
+		vec3 gradq = float(1.0 / (rl * h)) * r;
+		if (q <= 0.5)
+		{
+			ret = float(48.0 / (PI * h3) * q * (3.0 * q - 2.0)) * gradq;
+		}
+		else
+		{
+			float factor = 1.0 - q;
+			ret = float(48.0 / (PI * h3) * (-factor * factor)) * gradq;
+		}
+	}
+	return ret;
+}
+void GetNeighbors(){
+    count = 0;
+    uint idx = gl_GlobalInvocationID.x;
+    float h = cobj.SphRadius;
+    float vx0 = floor(particlesIn[idx].Location.x/h);
+    float vy0 = floor(particlesIn[idx].Location.y/h);
+    float vz0 = floor(particlesIn[idx].Location.z/h);
+    for(int dx =-1;dx<=1;++dx){
+        for(int dy=-1;dy<=1;++dy){
+            for(int dz=-1;dz<=1;++dz){
+                float vx = dx+vx0,vy = dy+vy0,vz = dz+vz0;
+                
+                int low = 0,high = int(cobj.NumParticles-1);
+                int find = -1;
+                while(low<=high){
+                    int mid = (low+high)/2;
+                    float vx1 = floor(particlesIn[mid].Location.x/h);
+                    float vy1 = floor(particlesIn[mid].Location.y/h);
+                    float vz1 = floor(particlesIn[mid].Location.z/h);
+
+                    bool less = false;
+                    if(vx1<vx){
+                        less = true;
+                    }
+                    else if(vx1>vx){
+                        less = false;
+                    }
+                    else if(vy1<vy){
+                        less = true;
+                    }
+                    else if(vy1>vy){
+                        less = false;
+                    }
+                    else if(vz1<vz){
+                        less = true;
+                    }
+                    if(less){
+                        low = mid+1;
+                    }
+                    else{
+                        find = mid;
+                        high = mid-1;
+                    }
+                }
+                if(find!=-1){
+                    while(find < cobj.NumParticles){
+                        float vx1 = floor(particlesIn[find].Location.x/h);
+                        float vy1 = floor(particlesIn[find].Location.y/h);
+                        float vz1 = floor(particlesIn[find].Location.z/h);
+                        if(vx1 != vx || vy1 != vy || vz1 != vz){
+                            break;
+                        }
+                        if(length(particlesout[idx].Location - particlesout[find].Location)<=h&&idx!=find){
+                            ngbrs[count++] = find;
+                        }
+                        find++;
+                    }
+                }
+            }
+        }
+    } 
+}
+void main(){
+    index = gl_GlobalInvocationID.x;
+    if(index >= cobj.NumParticles) return;
+    //the solid particles should not be updated
+    if(particlesout[index].IsFluid == 0) return;
+
+    GetNeighbors();
+    
+    vec3 omega = vec3(0,0,0);
+    vec3 omega_dx = vec3(0,0,0);
+    vec3 omega_dy = vec3(0,0,0);
+    vec3 omega_dz = vec3(0,0,0);
+
+    for(uint i=0;i<count;++i){
+        uint ngbr = ngbrs[i];
+        if(particlesout[ngbr].IsFluid == 0) continue;
+        vec3 vgap = particlesout[ngbr].TmpVelocity- particlesout[index].TmpVelocity;
+        omega += cross(vgap,-Grad_W_Spiky(particlesout[index].Location - particlesout[ngbr].Location,cobj.SphRadius));
+
+        omega_dx += cross(vgap,-Grad_W_Spiky(particlesout[index].Location - particlesout[ngbr].Location + vec3(0.01,0,0),cobj.SphRadius));
+
+        omega_dy += cross(vgap,-Grad_W_Spiky(particlesout[index].Location - particlesout[ngbr].Location + vec3(0,0.01,0),cobj.SphRadius));
+
+        omega_dz += cross(vgap,-Grad_W_Spiky(particlesout[index].Location - particlesout[ngbr].Location + vec3(0,0,0.01),cobj.SphRadius));
+    }
+    float omega_length = length(omega);
+    vec3 N = vec3(length(omega_dx)-omega_length,length(omega_dy)-omega_length,length(omega_dz)-omega_length);
+    N = normalize(N);
+    if(isnan(N.x) || isnan(N.y) || isnan(N.z)) return;
+    vec3 force = 0.0000001f*cross(N,omega);
+    particlesout[index].Velocity += force*cobj.DeltaTime;
+}
