@@ -14,15 +14,18 @@
 
 class Renderer{
 public:
-    Renderer(uint32_t w,uint32_t h,RendererFeaturesFlag feature,bool validation = false,std::string texfile="");
+    Renderer(uint32_t w,uint32_t h,bool validation = false);
     virtual ~Renderer();
 public:
-    TickResult Tick(float DeltaTime);
+    TickWindowResult TickWindow(float DeltaTime);
     void Init();
     void Cleanup();
 public:
     void Simulate();
     void Draw();
+public:
+    void Test_GetSortedIndex(std::vector<int>& indexs);
+    void WaitIdle();
 private:
     void CreateInstance();
     void CreateDebugMessenger();
@@ -30,18 +33,25 @@ private:
     void PickPhysicalDevice();
     void CreateLogicalDevice();
 
-    void GetMSAASampleCount();
     void CreateSupportObjects();
     void CleanupSupportObjects();
     void CreateCommandPool();
-    void CreateVertexBuffer();
-    void CreateIndexBuffer();
+
     void CreateParticleBuffer();
-    void CreateUniformMVPBuffer();
-    void CreateUniformComputeBuffer();
-    void CreateTextureResources();
+    void CreateParticleNgbrBuffer();
+
+    void CreateUniformRenderingBuffer();
+    void CreateUniformSimulatingBuffer();
+    void CreateUniformNSBuffer();
+
+    void CreateRadixsortedIndexBuffer();
+    void CreateRSGlobalBucketBuffer();
+    void CreateCellinfoBuffer();
+    void CreateLocalPrefixBuffer();
+
     void CreateDepthResources();
-    void CreateMSAAResources();
+    void CreateThickResources();
+
 
     void CreateSwapChain();
     void CleanupSwapChain();
@@ -50,6 +60,7 @@ private:
     void CreateDescriptorSetLayout();
     void CreateDescriptorPool();
     void CreateDescriptorSet();
+    void UpdateDescriptorSet();
 
     void CreateRenderPass();
     void CreateGraphicPipelineLayout();
@@ -59,6 +70,8 @@ private:
     void CreateComputePipeline();
 
     void CreateFramebuffers();
+
+    void RecordSimulatingCommandBuffers();
 
 private:
     void GetRequestInstaceExts(std::vector<const char*>& exts);
@@ -79,13 +92,14 @@ private:
     VkShaderModule MakeShaderModule(const char* filename);
 
     VkCommandBuffer CreateCommandBuffer();
-    void SubmitCommandBuffer(VkCommandBuffer& cb,VkSubmitInfo submitinfom,VkFence fence);
+    void SubmitCommandBuffer(VkCommandBuffer& cb,VkSubmitInfo submitinfom,VkFence fence,VkQueue queue);
 
     void CreateBuffer(VkBuffer& buffer,VkDeviceMemory& memory,VkDeviceSize size,VkBufferUsageFlags usage,VkMemoryPropertyFlags memproperties);
     uint32_t ChooseMemoryType(uint32_t typefilter,VkMemoryPropertyFlags properties);
     void CleanupBuffer(VkBuffer& buffer,VkDeviceMemory& memory,bool mapped);
     void CreateImage(VkImage &image, VkDeviceMemory &memory,VkExtent3D extent,VkFormat format, VkImageUsageFlags usage,VkSampleCountFlagBits samplecount);
     void ImageLayoutTransition(VkImage& image,VkImageLayout oldlayout,VkImageLayout newlayout,VkImageAspectFlags asepct);
+
 private:
     VkImageView CreateImageView(VkImage image,VkFormat format,VkImageAspectFlags aspectMask);
 private:
@@ -105,9 +119,20 @@ private:
     VkExtent2D SwapChainImageExtent;
     std::vector<VkImage> SwapChainImages;
     std::vector<VkImageView> SwapChainImageViews;
-    std::vector<VkFramebuffer> SwapChainFramebuffers;
 
     VkDescriptorPool DescriptorPool;
+
+    VkDescriptorSetLayout NSDescriptorSetLayout;
+   
+    std::vector<VkDescriptorSet> NSDescriptorSets[2];
+
+    VkPipelineLayout NSPipelineLayout;
+    VkPipeline NSPipeline_CalcellHash;
+    VkPipeline NSPipeline_Radixsort1;
+    VkPipeline NSPipeline_Radixsort2;
+    VkPipeline NSPipeline_Radixsort3;
+    VkPipeline NSPipeline_FixcellBuffer;
+    VkPipeline NSPipeline_GetNgbrs;
 
     VkRenderPass GraphicRenderPass;
     VkDescriptorSetLayout GraphicDescriptorSetLayout;
@@ -115,94 +140,113 @@ private:
     VkPipelineLayout GraphicPipelineLayout;
     VkPipeline GraphicPipeline;
 
-    VkDescriptorSetLayout ComputeDescriptorSetLayout;
-    std::vector<VkDescriptorSet> ComputeDescriptorSet;
-    VkPipelineLayout ComputePipelineLayout;
-    VkPipeline ComputePipeline_Euler;
-    VkPipeline ComputePipeline_Lambda;
-    VkPipeline ComputePipeline_DeltaPosition;
-    VkPipeline ComputePipeline_PositionUpd;
-    VkPipeline ComputePipeline_VelocityUpd;
-    VkPipeline ComputePipeline_VelocityCache;
-    VkPipeline ComputePipeline_VicosityCorr;
-    VkPipeline ComputePipeline_VorticityCorr;
-    
+    VkDescriptorSetLayout SimulateDescriptorSetLayout;
+    std::vector<VkDescriptorSet> SimulateDescriptorSet;
+    VkPipelineLayout SimulatePipelineLayout;
+    VkPipeline SimulatePipeline_Euler;
+    VkPipeline SimulatePipeline_Lambda;
+    VkPipeline SimulatePipeline_DeltaPosition;
+    VkPipeline SimulatePipeline_PositionUpd;
+    VkPipeline SimulatePipeline_VelocityUpd;
+    VkPipeline SimulatePipeline_VelocityCache;
+    VkPipeline SimulatePipeline_VicosityCorr;
+    VkPipeline SimulatePipeline_VorticityCorr;
 
-    VkFence InFlightFences;
+    VkDescriptorSetLayout FilterDecsriptorSetLayout;
+    VkDescriptorSet FilterDescriptorSet;
+    VkPipelineLayout FilterPipelineLayout;
+    VkPipeline FilterPipeline;
+
+    VkDescriptorSetLayout PostprocessDescriptorSetLayout;
+    std::vector<VkDescriptorSet> PostprocessDescriptorSets;
+    VkPipelineLayout PostprocessPipelineLayout;
+    VkPipeline PostprocessPipeline;
+
+    VkFence DrawingFence;
     VkSemaphore ImageAvaliable;
+    VkSemaphore DepthNThickAvaliable;
     VkSemaphore RenderingFinish;
-    VkSemaphore ComputingFinish;
-    VkFence ComputingFinishFence;
-    
+    VkSemaphore FilteringFinish;
+    VkSemaphore SimulatingFinish;
 
-    VkBuffer VertexBuffer;
-    VkDeviceMemory VertexBufferMemory;
-    VkBuffer IndexBuffer;
-    VkDeviceMemory IndexBufferMemory;
+    VkBuffer UniformRenderingBuffer;
+    VkDeviceMemory UniformRenderingBufferMemory;
+    void* MappedRenderingBuffer;
 
-    VkBuffer UnifromMVPBuffer;
-    VkDeviceMemory UnfiromMVPBufferMemory;
-    void* MappedMVPBuffer;
-    VkBuffer UniformComputeBuffer;
-    VkDeviceMemory UniformComputeBufferMemory;
-    void* MappedComputeBuffer;
-    VkBuffer UniformVoxelBuffer;
-    VkDeviceMemory UniformVoxelBufferMemory;
+    VkBuffer UniformSimulatingBuffer;
+    VkDeviceMemory UniformSimulatingBufferMemory;
+    void* MappedSimulatingBuffer;
 
-    VkImage TextureImage;
-    VkDeviceMemory TextureImageMemory;
-    VkImageView TextureImageView;
-    VkSampler TextureSampler;
+    VkBuffer UniformNSBuffer;
+    VkDeviceMemory UniformNSBufferMemory;
+    void* MappedNSBuffer;
 
-    std::vector<VkImage> DepthImage;
-    std::vector<VkDeviceMemory> DepthImageMemory;
-    std::vector<VkImageView> DepthImageView;
+    VkImage ThickImage;
+    VkDeviceMemory ThickImageMemory;
+    VkImageView ThickImageView;
+    VkSampler ThickImageSampler;
 
-    VkSampleCountFlagBits MSAASampleCount;
+    VkImage DepthImage;
+    VkDeviceMemory DepthImageMemory;
+    VkImageView DepthImageView;
 
-    std::vector<VkImage> MSAAImages;
-    std::vector<VkDeviceMemory> MSAAImageMemory;
-    std::vector<VkImageView> MSAAImageView;
+    VkImage CustomDepthImage;
+    VkDeviceMemory CustomDepthImageMemory;
+    VkImageView CustomDepthImageView;
+    VkSampler CustomDepthImageSampler;
+
+    VkImage FilteredDepthImage;
+    VkDeviceMemory FilteredDepthImageMemory;
+    VkImageView FilteredDepthImageView;
+    VkSampler FilteredDepthImageSampler;
+
+    VkFramebuffer Framebuffer;
 
     std::vector<VkBuffer> ParticleBuffers;
     std::vector<VkDeviceMemory> ParticleBufferMemory;
-    std::vector<void*> MappedParticleBufferMemory;
+
+    VkBuffer ParticleNgbrBuffer;
+    VkDeviceMemory ParticleNgbrBufferMemory;
+
+    VkBuffer RadixsortedIndexBuffer[2];
+    VkDeviceMemory RadixsortedIndexBufferMemory[2];
+
+    VkBuffer RSGlobalBucketBuffer;
+    VkDeviceMemory RSGlobalBucketBufferMemory;
+
+    VkBuffer LocalPrefixBuffer;
+    VkDeviceMemory LocalPrefixBufferMemory;
+
+    VkBuffer CellinfoBuffer;
+    VkDeviceMemory CellinfoBufferMemory;
+
+    std::vector<VkCommandBuffer> SimulatingCommandBuffers;
+
 
 public:
-    void SetVertices(const std::vector<Vertex>& vs, const std::vector<uint32_t>& is,bool init);
-    void SetMVP(glm::mat4& model,glm::mat4& view,glm::mat4& projection,bool init);
-    void SetParticles(const std::vector<Particle>& ps,bool init);
-    void SetComputeUbo(const UniformComputeObject& ubo,bool init);
-public:
-    void GetParticles(std::vector<Particle>& ps);
+    void SetRenderingObj(const UniformRenderingObject& robj);
+    void SetSimulatingObj(const UniformSimulatingObject& sobj);
+    void SetNSObj(const UniformNSObject& nobj);
+    void SetParticles(const std::vector<Particle>& ps);
 private:
-    RendererFeaturesFlag FeatureFlag;
+    
+    bool Initialized = false;
     uint32_t Width;
     uint32_t Height;
-    std::vector<Vertex> vertices = {
-        {{0.5,-0.5,0},{},{},{1,0}},
-        {{-0.5,-0.5,0},{},{},{0,0}},
-        {{-0.5,0.5,0},{},{},{0,1}},
-        {{0.5,0.5,0},{},{},{1,1}}
-    };
-    std::vector<uint32_t> indexs ={
-        0,1,2
-    };
-    std::vector<Particle> particles = {
-        {{0.5,-0.5,0}},
-        {{-0.5,-0.5,0}},
-        {{-0.5,0.5,0}},
-    };
+    std::vector<Particle> particles;
 
+    UniformNSObject nsobject{};
+    UniformRenderingObject renderingobj{};
+    UniformSimulatingObject simulatingobj{};
 
-    UniformMVPObject mvp;
-    UniformComputeObject computeobj;
     bool bEnableValidation = false;
     uint32_t CurrentFlight = 0;
     uint32_t MAXInFlightRendering = 2;
-    std::string texturefile = "";    
 
+    uint32_t ONE_GROUP_INVOCATION_COUNT = 512;
+    uint32_t WORK_GROUP_COUNT;
 
-     bool bFramebufferResized = false;
+    uint32_t MAX_NGBR_NUM = 128;
+    bool bFramebufferResized = false;
 };
 #endif

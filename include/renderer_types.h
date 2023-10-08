@@ -20,45 +20,10 @@ struct SurfaceDetails{
     std::vector<VkPresentModeKHR> presentmode;
     
 };
-enum class TickResult{
+enum class TickWindowResult{
     NONE,
+    HIDE,
     EXIT,
-};
-struct Vertex{
-    glm::vec3 Location;
-    glm::vec3 Normal;
-    glm::vec4 Color = glm::vec4(-1.0f,-1.0f,-1.0f,-1.0f);
-    glm::vec2 TexCoord;
-    static VkVertexInputBindingDescription GetBinding(){
-       VkVertexInputBindingDescription binding{};
-       binding.binding = 0;
-       binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-       binding.stride = sizeof(Vertex);
-       return binding;
-    }
-    static std::array<VkVertexInputAttributeDescription,4> GetAttributes(){
-        std::array<VkVertexInputAttributeDescription,4> attributes;
-        attributes[0].binding = 0;
-        attributes[0].location = 0;
-        attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[0].offset = offsetof(Vertex,Location);
-
-        attributes[1].binding = 0;
-        attributes[1].location = 1;
-        attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[1].offset = offsetof(Vertex,Normal);
-
-        attributes[2].binding = 0;
-        attributes[2].location = 2;
-        attributes[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributes[2].offset = offsetof(Vertex,Color);
-
-        attributes[3].binding = 0;
-        attributes[3].location = 3;
-        attributes[3].format = VK_FORMAT_R32G32_SFLOAT;
-        attributes[3].offset = offsetof(Vertex,TexCoord);
-        return attributes;
-    }
 };
 struct Particle{
     alignas(16) glm::vec3 Location;
@@ -67,45 +32,55 @@ struct Particle{
     alignas(4) float Lambda;
     alignas(4) float Density;
     alignas(4) float Mass;
-    alignas(4) uint32_t IsFluid;
 
     alignas(16) glm::vec3 TmpVelocity;
-     static VkVertexInputBindingDescription GetBinding(){
-       VkVertexInputBindingDescription binding{};
-       binding.binding = 0;
-       binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-       binding.stride = sizeof(Particle);
-       return binding;
+
+    alignas(4) uint32_t CellHash;
+    alignas(4) uint32_t TmpCellHash;
+
+    alignas(4) uint32_t NumNgbrs;
+
+    static VkVertexInputBindingDescription GetBinding(){
+        VkVertexInputBindingDescription binding{};
+        binding.binding = 0;
+        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        binding.stride = sizeof(Particle);
+        return binding;
     } 
-    static std::array<VkVertexInputAttributeDescription,2> GetAttributes(){
-        std::array<VkVertexInputAttributeDescription,2> attributes;
+    static std::array<VkVertexInputAttributeDescription,1> GetAttributes(){
+        std::array<VkVertexInputAttributeDescription,1> attributes;
         attributes[0].binding = 0;
         attributes[0].location = 0;
         attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributes[0].offset = offsetof(Particle,Location);
-
-        attributes[1].binding = 0;
-        attributes[1].location = 1;
-        attributes[1].format = VK_FORMAT_R32_UINT;
-        attributes[1].offset = offsetof(Particle,IsFluid);
         return attributes;
     }
 };
-struct UniformMVPObject{
+struct UniformRenderingObject{
+    alignas(4) float zNear;
+    alignas(4) float zFar;
+    alignas(4) float fovy;
+    alignas(4) float aspect;
+
     alignas(16) glm::mat4 model = glm::mat4(1.0f);
     alignas(16) glm::mat4 view = glm::mat4(1.0f);
     alignas(16) glm::mat4 projection = glm::mat4(1.0f);
+
+    alignas(4) float particleRadius;
 };
-struct UniformComputeObject{
-    alignas(4) float DeltaTime = 0.0f;
-    alignas(4) float RestDensity = 0.0f;
-    alignas(4) float SphRadius;
-    alignas(4) uint32_t NumFluids;
-    alignas(4) uint32_t NumParticles;
+struct UniformSimulatingObject{
+    alignas(4) float dt;
+    alignas(4) float restDensity;
+    alignas(4) float sphRadius;
+    alignas(4) uint32_t numParticles;
 };
-typedef uint32_t RendererFeaturesFlag;
-enum RendererFeaturesFlagBits{
-    RF_TEXTRUE = 0x1,
-    RF_PARTICLE = 0x2,
+struct UniformNSObject{
+    alignas(4) uint32_t numParticles;
+
+    alignas(4) uint32_t workgroup_count;
+    alignas(4) uint32_t hashsize;
+
+    alignas(4) float sphRadius;
 };
+
 #endif

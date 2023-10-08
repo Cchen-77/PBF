@@ -1,0 +1,72 @@
+#version 450
+
+layout(binding=0) uniform UniformNSObject{
+    uint numParticles;
+    uint workgroup_count;
+    uint hashsize;
+    float sphRadius;
+}; 
+layout(binding=5) buffer RSBucketBuffer{
+    uint rsbucket[];
+};
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
+
+shared uint presum[16*512];
+
+void main(){
+    uint localindex = int(gl_LocalInvocationID.x);
+
+    if(localindex < workgroup_count){
+        for(uint i=0;i<16;++i){
+            presum[localindex*16+i] = rsbucket[localindex*16+i];
+        }
+    }
+    
+    memoryBarrier();
+    barrier();
+    for(int s=1;s<512;s*=2){
+        uint idx = (s-1)+(localindex*2*s);
+        uint idx_dst = 16*(idx+s);
+        uint idx_src = 16*(idx);
+        if(idx < 512){
+            //TODO:unroll
+            for(uint i=0;i<16;++i){
+                presum[idx_dst+i] += presum[idx_src+i];
+            }
+        }
+        memoryBarrier();
+        barrier();
+    }
+    //TODO:unroll
+    if(localindex == 511){
+        for(uint i=0;i<16;++i){
+            presum[511*16+i] = 0;
+        }
+    }
+    memoryBarrier();
+    barrier();
+
+    for(uint s=512;s>1;s/=2){
+        uint idx = (s-1)+(localindex*s);
+        uint idx_1 = 16*(idx-s/2);
+        uint idx_2 = 16*(idx);
+        if(idx<512){
+            for(uint i=0;i<16;++i){
+                uint t = presum[idx_2+i];
+                presum[idx_2+i] += presum[idx_1+i];
+                presum[idx_1+i] = t;
+            }
+        }
+        memoryBarrier();
+        barrier();
+    }
+
+    memoryBarrier();
+    barrier();
+     if(localindex <= workgroup_count){
+        for(uint i=0;i<16;++i){
+            rsbucket[localindex*16+i] = presum[localindex*16+i];
+        }
+    }
+
+}

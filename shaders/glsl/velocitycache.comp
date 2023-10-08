@@ -1,0 +1,31 @@
+#version 450
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+    uint IsFluid;
+
+    vec3 TmpVelocity;
+};
+layout(binding=0) uniform SimulateObj{
+    float dt;
+    float restDensity;
+    float sphRadius;
+    uint numParticles;
+} simulateobj;
+
+layout(std140,binding=1) readonly buffer ParticleSSBOIn{
+    Particle particlesIn[];
+};
+layout(std140,binding=2) buffer ParticleSSBOout{
+    Particle particlesout[];
+};
+float PI = 3.1415926;
+
+void main(){
+  
+   
+}

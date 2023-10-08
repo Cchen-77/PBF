@@ -1,0 +1,48 @@
+#version 450
+
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+
+    vec3 TmpVelocity;
+
+    uint CellHash;
+    uint TmpCellHash;
+
+    uint NumNgbrs;
+};
+
+layout(binding=0) uniform UniformNSObject{
+    uint numParticles;
+    uint workgroup_count;
+    uint hashsize;
+    float sphRadius;
+}; 
+
+layout(binding=3) buffer ParticleBuffer{
+    Particle particles[];
+};
+layout(binding=6) buffer CellinfoBuffer{
+    uint cellinfo[];
+};
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
+void main(){
+    uint particleindex = gl_GlobalInvocationID.x;
+    if(particleindex<numParticles){
+        
+        cellinfo[4*particleindex+0] = 0;
+        cellinfo[4*particleindex+1] = 0;
+        cellinfo[4*particleindex+2] = 0;
+        cellinfo[4*particleindex+3] = 0;
+
+        int i = int(floor(particles[particleindex].Location.x/sphRadius));
+        int j = int(floor(particles[particleindex].Location.y/sphRadius));
+        int k = int(floor(particles[particleindex].Location.z/sphRadius));
+        particles[particleindex].CellHash = (uint((73856093*i)^(19349663*j)^(83492791*k)))%hashsize;
+        particles[particleindex].TmpCellHash = particles[particleindex].CellHash;
+    }
+}

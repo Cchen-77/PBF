@@ -1,0 +1,39 @@
+#version 450
+
+float PI = 3.1415926;
+
+layout(local_size_x=4,local_size_y=4,local_size_z=1) in;
+
+layout(binding=0) uniform UniformRenderingObject{
+    float zNear;
+    float zFar;
+    float fovy;
+    float aspect;
+
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+
+    float particleRadius;
+} renderingobj;
+
+layout(binding=1) uniform sampler2D depthimage;
+layout(binding=2) uniform sampler2D thicknessimage;
+layout(binding=3,rgba32f) uniform writeonly image2D dstimage;
+float Fresnel(float cos_v,float R0){
+    return R0 + (1-R0)*(1-pow(cos_v,5));
+}
+void main(){
+    ivec2 outcoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imagesize = imageSize(dstimage);
+    
+    if(outcoord.x >= imagesize.x || outcoord.y >= imagesize.y) return;
+    imageStore(dstimage,outcoord,vec4(0,0,0,0));
+    
+    float u = (outcoord.x + 0.5)/imagesize.x;
+    float v = (outcoord.y + 0.5)/imagesize.y;
+
+    float depth = texture(depthimage,vec2(u,v)).r;
+    imageStore(dstimage,outcoord,vec4(1-depth,1-depth,1-depth,1));
+    
+}

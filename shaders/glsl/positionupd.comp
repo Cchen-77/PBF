@@ -1,0 +1,33 @@
+#version 450
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+
+    vec3 TmpVelocity;
+
+    uint CellHash;
+    uint TmpCellHash;
+
+    uint NumNgbrs;
+};
+
+layout(binding=2) buffer ParticleSSBOout{
+    Particle particlesOut[];
+};
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
+
+float PI = 3.1415926;
+
+
+void main(){
+    uint globalindex = gl_GlobalInvocationID.x;
+    uint localindex = gl_LocalInvocationID.x;
+    
+   particlesOut[globalindex].Location += particlesOut[globalindex].DeltaLocation;
+   particlesOut[globalindex].Location = max(vec3(-100,0,-100),particlesOut[globalindex].Location);
+
+}

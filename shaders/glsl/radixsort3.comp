@@ -1,0 +1,65 @@
+#version 450
+
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+
+    vec3 TmpVelocity;
+
+    uint CellHash;
+    uint TmpCellHash;
+
+    uint NumNgbrs;
+};
+
+layout(binding=0) uniform UniformNSObject{
+    uint numParticles;
+    uint workgroup_count;
+    uint hashsize;
+    float sphRadius;
+}; 
+layout(binding=1) readonly buffer InIndexbuffer{
+    uint inindex[];
+};
+layout(binding=2) buffer OutIndexbuffer{
+    uint outindex[];
+};
+layout(binding=3) buffer ParticleBuffer{
+    Particle particles[];
+};
+layout(binding=4) buffer ParticleNgbrBuffer{
+    uint particlengbrs[];
+};
+layout(binding=5) buffer RSBucketBuffer{
+    uint rsbucket[];
+};
+layout(binding=6) buffer CellinfoBuffer{
+    uint cellinfo[];
+};
+layout(binding=7) buffer LocalPrefixBuffer{
+    uint localprefix[];
+};
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
+void main(){
+    uint localindex = (gl_LocalInvocationID.x);
+    uint globalindex = (gl_GlobalInvocationID.x);
+    uint wgindex = (gl_WorkGroupID.x);
+    if(globalindex >= numParticles){
+        return;
+    }
+    uint sum = 0;
+    uint particleindex = inindex[globalindex];
+    uint val = (particles[particleindex].TmpCellHash&0xF);
+    for(int i=0;i<val;++i){
+        sum += rsbucket[16*(workgroup_count)+i];
+    }
+    uint dstidx = sum + rsbucket[16*wgindex+val] + localprefix[16*globalindex+val];
+    
+    outindex[dstidx] = particleindex;
+
+    particles[particleindex].TmpCellHash >>=4;
+}

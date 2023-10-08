@@ -1,0 +1,60 @@
+#version 450
+
+struct Particle{
+    vec3 Location;
+    vec3 Velocity;
+    vec3 DeltaLocation;
+    float Lambda;
+    float Density;
+    float Mass;
+
+    vec3 TmpVelocity;
+
+    uint CellHash;
+    uint TmpCellHash;
+
+
+    uint NumNgbrs;
+};
+
+layout(binding=0) uniform UniformNSObject{
+    uint radix;
+    uint numParticles;
+    uint maxNumNgbrs;
+    uint workgroup_count;
+    uint hashsize;
+    float sphRadius;
+}; 
+layout(binding=2) buffer OutIndexbuffer{
+    uint outindex[];
+};
+layout(binding=3) buffer ParticleBuffer{
+    Particle particles[];
+};
+layout(binding=6) buffer CellinfoBuffer{
+    uint cellinfo[];
+};
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
+void main(){
+    uint globalindex = gl_GlobalInvocationID.x;
+    if(globalindex>=numParticles) return;
+    uint hashvalue = particles[outindex[globalindex]].CellHash;
+    if(globalindex == 0){
+        cellinfo[2*hashvalue] = 0;
+    }
+    if(globalindex==numParticles-1){
+        cellinfo[2*hashvalue+1] = numParticles;
+    }
+    if(globalindex !=0){
+        uint hashvalue_before = particles[outindex[globalindex-1]].CellHash;
+        if(hashvalue_before != hashvalue){
+            cellinfo[2*hashvalue] = globalindex;
+        }
+    }
+    if(globalindex!=numParticles-1){
+        uint hashvalue_after =particles[outindex[globalindex+1]].CellHash;
+        if(hashvalue_after != hashvalue){
+            cellinfo[2*hashvalue+1] = globalindex+1;
+        }
+    }
+}
