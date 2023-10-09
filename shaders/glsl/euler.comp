@@ -17,9 +17,18 @@ struct Particle{
 
 layout(binding=0) uniform SimulateObj{
     float dt;
+    float accumulated_t;
     float restDensity;
     float sphRadius;
     uint numParticles;
+
+    float coffPoly6;
+    float coffSpiky;
+    float coffGradSpiky;
+
+    float scorrK;
+    float scorrN;
+    float scorrQ;
 };
 
 layout(binding=1) readonly buffer ParticleSSBOIn{
@@ -30,14 +39,15 @@ layout(binding=2) buffer ParticleSSBOout{
 };
 layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
 
-float PI = 3.1415926;
 
 void main(){
     
     uint particleindex = gl_GlobalInvocationID.x;
 
     if(particleindex<numParticles){
+        
         particlesOut[particleindex].Velocity = particlesIn[particleindex].Velocity + vec3(0,-9.8,0)*dt;
         particlesOut[particleindex].Location = particlesIn[particleindex].Location + particlesOut[particleindex].Velocity*dt;
+        
     }
 }

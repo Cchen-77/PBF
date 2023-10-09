@@ -70,9 +70,18 @@ struct UniformRenderingObject{
 };
 struct UniformSimulatingObject{
     alignas(4) float dt;
+    alignas(4) float accumulated_t;
     alignas(4) float restDensity;
     alignas(4) float sphRadius;
     alignas(4) uint32_t numParticles;
+
+    alignas(4) float coffPoly6;
+    alignas(4) float coffSpiky;
+    alignas(4) float coffGradSpiky;
+
+    alignas(4) float scorrK;
+    alignas(4) float scorrN;
+    alignas(4) float scorrQ;
 };
 struct UniformNSObject{
     alignas(4) uint32_t numParticles;

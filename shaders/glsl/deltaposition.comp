@@ -16,9 +16,18 @@ struct Particle{
 };
 layout(binding=0) uniform SimulateObj{
     float dt;
+    float accumulated_t;
     float restDensity;
     float sphRadius;
     uint numParticles;
+
+    float coffPoly6;
+    float coffSpiky;
+    float coffGradSpiky;
+
+    float scorrK;
+    float scorrN;
+    float scorrQ;
 };
 
 layout(binding=2) buffer ParticleSSBOout{
@@ -29,58 +38,52 @@ layout(binding=3) readonly buffer ParticleNgbrs{
 };
 layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
 
-float PI = 3.1415926;
-
-float W_Poly6(vec3 r,float h)
+float W_Poly6(vec3 r, float h)
 {
-    float ret = 0.0;
-	float rl = length(r);
-	float q = rl / h;
-	float h3 = h * h * h;
-	if (q <= 0.5)
-	{
-		float q2 = q * q;
-		float q3 = q2 * q;
-		ret = 8.0 / (PI * h3) * (6.0 * q3 - 6.0 * q2 + 1.0);
-	}
-	else
-	{
-		ret = 16.0 / (PI * h3) * pow(1 - q, 3.0);
-	}
-	return ret;
+    float radius = length(r);
+    float res = 0.0f;
+    if (radius <= h && radius >= 0)
+    {
+        float item = 1 - pow(radius / h, 2);
+        res = coffPoly6 * pow(item, 3);
+    }
+    return res;
 }
-vec3 Grad_W_Spiky(vec3 r,float h)
+float WSpiky(vec3 r, float h)
 {
-    vec3 ret = {0,0,0};
-	float rl = length(r);
-	float q = rl / h;
-	float h3 = h * h * h;
-	if (rl > 1.0e-6)
-	{
-		vec3 gradq = float(1.0 / (rl * h)) * r;
-		if (q <= 0.5)
-		{
-			ret = float(48.0 / (PI * h3) * q * (3.0 * q - 2.0)) * gradq;
-		}
-		else
-		{
-			float factor = 1.0 - q;
-			ret = float(48.0 / (PI * h3) * (-factor * factor)) * gradq;
-		}
-	}
-	return ret;
+    float radius = length(r);
+    float res = 0.0f;
+    if (radius <= h && radius >= 0)
+    {
+        float item = 1 - (radius / h);
+        res = coffSpiky * pow(item, 6);
+    }
+    return res;
+}
+vec3 Grad_W_Spiky(vec3 r, float h)
+{
+    float radius = length(r);
+    vec3 res = vec3(0.0f, 0.0f, 0.0f);
+    if (radius < h && radius > 0)
+    {
+        float item = 1 - (radius / h);
+        res = coffGradSpiky * pow(item, 2) * normalize(r);
+    }
+    return res;
 }
 void main(){
     uint globalindex = gl_GlobalInvocationID.x;
     uint localindex = gl_LocalInvocationID.x;
-    
+    if(globalindex >= numParticles) return;
     particlesOut[globalindex].DeltaLocation = vec3(0,0,0);
     for(uint i=0;i<particlesOut[globalindex].NumNgbrs;++i){
        uint ngbr = particleNgbrs[128*globalindex+i];
-       particlesOut[globalindex].DeltaLocation += (particlesOut[globalindex].Lambda + particlesOut[ngbr].Lambda)
-                                                *Grad_W_Spiky(particlesOut[globalindex].Location - particlesOut[ngbr].Location,sphRadius);
+       vec3 r = particlesOut[globalindex].Location - particlesOut[ngbr].Location;
+       float scorr = -scorrK/restDensity*pow(W_Poly6(r,sphRadius)/W_Poly6(vec3(scorrQ*sphRadius,0,0),sphRadius),scorrN);
+       particlesOut[globalindex].DeltaLocation += particlesOut[ngbr].Mass*(particlesOut[globalindex].Lambda + particlesOut[ngbr].Lambda + scorr)
+                                                *Grad_W_Spiky(r,sphRadius);
     }
     particlesOut[globalindex].DeltaLocation /= restDensity;
 
-    
+
 }

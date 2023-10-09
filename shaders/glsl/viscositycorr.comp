@@ -72,31 +72,16 @@ vec3 Grad_W_Spiky(vec3 r, float h)
     return res;
 }
 void main(){
-    uint particleindex = gl_GlobalInvocationID.x;
-    if(particleindex >= numParticles) return;
-
-    vec3 omega = vec3(0,0,0);
-    vec3 omega_dx = vec3(0,0,0);
-    vec3 omega_dy = vec3(0,0,0);
-    vec3 omega_dz = vec3(0,0,0);
-
-    for(uint i=0;i<particlesOut[particleindex].NumNgbrs;++i){
-        uint ngbr = particleNgbrs[128*particleindex+i];
-  
-        vec3 vgap = particlesOut[ngbr].TmpVelocity- particlesOut[particleindex].TmpVelocity;
-        vec3 locationgap = particlesOut[particleindex].Location - particlesOut[ngbr].Location;
-        omega += cross(vgap,-Grad_W_Spiky(locationgap,sphRadius));
-
-        omega_dx += cross(vgap,Grad_W_Spiky(locationgap + vec3(0.001,0,0),sphRadius));
-
-        omega_dy += cross(vgap,Grad_W_Spiky(locationgap+ vec3(0,0.001,0),sphRadius));
-
-        omega_dz += cross(vgap,Grad_W_Spiky(locationgap + vec3(0,0,0.001),sphRadius));
+    uint globalindex = gl_GlobalInvocationID.x;
+    uint localindex = gl_LocalInvocationID.x;
+    if(globalindex>=numParticles) return;
+    
+    vec3 oldVelocity = particlesOut[globalindex].Velocity;
+    vec3 Location = particlesOut[globalindex].Location;
+    vec3 newVelocity = {0.0,0.0,0.0};
+    for(uint i=0;i<particlesOut[globalindex].NumNgbrs;++i){
+       uint ngbr = particleNgbrs[128*globalindex+i];
+       newVelocity = 0.01*(particlesOut[ngbr].TmpVelocity - oldVelocity)*W_Poly6(Location-particlesOut[ngbr].Location,sphRadius)/restDensity;
     }
-    float omega_length = length(omega);
-    vec3 N = vec3(length(omega_dx)-omega_length,length(omega_dy)-omega_length,length(omega_dz)-omega_length);
-    N = normalize(N);
-    if(isnan(N.x) || isnan(N.y) || isnan(N.z)) return;
-    vec3 force = 1e-7*cross(N,omega);
-    particlesOut[particleindex].Velocity += force*dt;
+    particlesOut[globalindex].Velocity += newVelocity;
 }

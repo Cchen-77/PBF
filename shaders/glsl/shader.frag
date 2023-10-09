@@ -19,15 +19,15 @@ layout(binding=0) uniform UniformRenderingObject{
 
 void main(){
     float radius = particleRadius;
-    // vec2 pos = gl_PointCoord - vec2(0.5);
-    // if(length(pos) > 0.5){
-    //     discard;
-    //     return;
-    // }
-    // float l = radius*2*length(pos);
-    // float depth = indepth - sqrt(radius*radius - l*l);
+    vec2 pos = gl_PointCoord - vec2(0.5);
+    if(length(pos) > 0.5){
+        discard;
+        return;
+    }
+    float l = radius*2*length(pos);
+    float depth = indepth - sqrt(radius*radius - l*l);
     
-    outdepth = 0;
+    outdepth = depth;
 
     outthickness = 0;
 

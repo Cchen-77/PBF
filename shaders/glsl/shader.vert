@@ -24,7 +24,12 @@ void main(){
 
     gl_Position = location;
 
-    gl_PointSize = 1;
+    float nearHeight = 2*zNear*tan(fovy/2);
 
+    float scale = 800/nearHeight;
+
+    float nearSize = particleRadius*zNear/outdepth;
+
+    gl_PointSize = 2*scale*nearSize;
   
 } 

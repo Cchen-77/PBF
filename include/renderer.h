@@ -24,7 +24,6 @@ public:
     void Simulate();
     void Draw();
 public:
-    void Test_GetSortedIndex(std::vector<int>& indexs);
     void WaitIdle();
 private:
     void CreateInstance();
@@ -149,7 +148,7 @@ private:
     VkPipeline SimulatePipeline_PositionUpd;
     VkPipeline SimulatePipeline_VelocityUpd;
     VkPipeline SimulatePipeline_VelocityCache;
-    VkPipeline SimulatePipeline_VicosityCorr;
+    VkPipeline SimulatePipeline_ViscosityCorr;
     VkPipeline SimulatePipeline_VorticityCorr;
 
     VkDescriptorSetLayout FilterDecsriptorSetLayout;

@@ -14,20 +14,52 @@ struct Particle{
 
     uint NumNgbrs;
 };
+layout(binding=0) uniform SimulateObj{
+    float dt;
+    float restDensity;
+    float sphRadius;
+    uint numParticles;
 
+    float coffPoly6;
+    float coffSpiky;
+    float coffGradSpiky;
+
+    float scorrK;
+    float scorrN;
+    float scorrQ;
+};
 layout(binding=2) buffer ParticleSSBOout{
     Particle particlesOut[];
 };
 layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
 
-float PI = 3.1415926;
-
 
 void main(){
     uint globalindex = gl_GlobalInvocationID.x;
     uint localindex = gl_LocalInvocationID.x;
+    if(globalindex >= numParticles) return;
     
-   particlesOut[globalindex].Location += particlesOut[globalindex].DeltaLocation;
-   particlesOut[globalindex].Location = max(vec3(-100,0,-100),particlesOut[globalindex].Location);
-
+    vec3 LocationStar = particlesOut[globalindex].Location + particlesOut[globalindex].DeltaLocation;
+    vec3 DeltaLocation = particlesOut[globalindex].DeltaLocation;
+    float distLeft = LocationStar.x - 0;
+    float distRight = 1 - LocationStar.x;
+    float distFront = 1- LocationStar.z;
+    float distBack = LocationStar.z;
+    float distFloor = LocationStar.y;
+    float distCeil = 1 - LocationStar.y;
+    float dists[6] = {distLeft,distRight,distFront,distBack,distFloor,distCeil};
+    vec3 normals[6] = {{1,0,0},{-1,0,0},{0,0,-1},{0,0,1},{0,1,0},{0,-1,0}};
+    float walldist = distLeft;
+    vec3 wallnormal = {1,0,0};
+    for(int i=1;i<6;++i){
+        if(dists[i] < walldist){
+            walldist = dists[i];
+            wallnormal = normals[i]; 
+        }
+    }
+    float radius = sphRadius/4;
+    if(walldist - radius <-1e-6){
+        DeltaLocation += 0.5*(radius-walldist)*wallnormal;
+    }
+    particlesOut[globalindex].Location += DeltaLocation;
 }

@@ -18,9 +18,7 @@ struct Particle{
 };
 
 layout(binding=0) uniform UniformNSObject{
-    uint radix;
     uint numParticles;
-    uint maxNumNgbrs;
     uint workgroup_count;
     uint hashsize;
     float sphRadius;

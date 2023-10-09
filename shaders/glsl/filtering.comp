@@ -15,36 +15,6 @@ void main(){
     float v = (outcoord.y + 0.5)/imagesize.y;
 
     float depth = texture(old_depthtexture,vec2(u,v)).r;
-    int filter_radius = 15;
-    float sum = 0;
-    float wsum = 0;
-    float spatial_blurscale = 0.1;
-    float range_blurscale = 1;
-    for(int dx = -filter_radius;dx<=filter_radius;++dx)
-        for(int dy = -filter_radius;dy<=filter_radius;++dy){
-        ivec2 sample_coord = outcoord + ivec2(dx,dy);
-        if(sample_coord.x < 0 || sample_coord.x >= imagesize.x || sample_coord.y < 0 || sample_coord.y >= imagesize.y){
-            continue;
-        }
-        float sample_u = (sample_coord.x + 0.5)/imagesize.x;
-        float sample_v = (sample_coord.y + 0.5)/imagesize.y;
-
-        float dsample = texture(old_depthtexture,vec2(sample_u,sample_v)).r;
     
-        //spatial domain
-        float r1 = sqrt(dx*dx + dy*dy)*spatial_blurscale;
-        float w = exp(-r1*r1);
-
-        //range domain
-        float r2 = (dsample - depth)*range_blurscale;
-        float g = exp(-r2*r2);
-
-        sum += w*g*dsample;
-        wsum += w*g;
-        
-    }
-    if(wsum > 0){
-        sum /= wsum;
-    }
     imageStore(filtered_depthtexture,outcoord,vec4(depth,0,0,0));
 }

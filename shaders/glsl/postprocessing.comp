@@ -15,7 +15,7 @@ layout(binding=0) uniform UniformRenderingObject{
     mat4 projection;
 
     float particleRadius;
-} renderingobj;
+};
 
 layout(binding=1) uniform sampler2D depthimage;
 layout(binding=2) uniform sampler2D thicknessimage;
@@ -34,6 +34,9 @@ void main(){
     float v = (outcoord.y + 0.5)/imagesize.y;
 
     float depth = texture(depthimage,vec2(u,v)).r;
-    imageStore(dstimage,outcoord,vec4(1-depth,1-depth,1-depth,1));
+
+    if(depth >= 1000) return;
+    float depth_zero_to_one = (depth - zNear)/(zFar - zNear);
+    imageStore(dstimage,outcoord,vec4(depth_zero_to_one,depth_zero_to_one,depth_zero_to_one,1));
     
 }

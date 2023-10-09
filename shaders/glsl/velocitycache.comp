@@ -6,26 +6,38 @@ struct Particle{
     float Lambda;
     float Density;
     float Mass;
-    uint IsFluid;
 
     vec3 TmpVelocity;
+
+    uint CellHash;
+    uint TmpCellHash;
+
+    uint NumNgbrs;
 };
 layout(binding=0) uniform SimulateObj{
     float dt;
+    float accumulated_t;
     float restDensity;
     float sphRadius;
     uint numParticles;
-} simulateobj;
 
-layout(std140,binding=1) readonly buffer ParticleSSBOIn{
-    Particle particlesIn[];
+    float coffPoly6;
+    float coffSpiky;
+    float coffGradSpiky;
+
+    float scorrK;
+    float scorrN;
+    float scorrQ;
 };
-layout(std140,binding=2) buffer ParticleSSBOout{
-    Particle particlesout[];
+layout(binding=2) buffer ParticleSSBOout{
+    Particle particlesOut[];
 };
-float PI = 3.1415926;
+layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
 
 void main(){
   
-   
+   uint particleindex = gl_GlobalInvocationID.x;
+   if(particleindex >= numParticles) return;
+
+   particlesOut[particleindex].TmpVelocity = particlesOut[particleindex].Velocity;
 }

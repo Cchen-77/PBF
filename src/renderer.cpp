@@ -307,7 +307,9 @@ void Renderer::SetSimulatingObj(const UniformSimulatingObject &sobj)
 {
     if(Initialized){
         vkDeviceWaitIdle(LDevice);
-        memcpy(MappedSimulatingBuffer,&sobj,sizeof(UniformSimulatingObject));
+        auto pObj = reinterpret_cast<UniformSimulatingObject*>(MappedSimulatingBuffer);
+        pObj->dt = sobj.dt;
+        pObj->accumulated_t = sobj.accumulated_t;
         vkDeviceWaitIdle(LDevice);
     }
     else{
@@ -353,7 +355,6 @@ Renderer::~Renderer()
 void Renderer::Init()
 {
     glfwInit();
-    glfwWindowHint(GLFW_RESIZABLE,GLFW_TRUE);
     glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);
     Window = glfwCreateWindow(Width,Height,"jason's renderer",nullptr,nullptr);
     glfwSetWindowUserPointer(Window,this);
@@ -420,7 +421,7 @@ void Renderer::Cleanup()
     vkDestroyPipeline(LDevice,SimulatePipeline_PositionUpd,Allocator);
     vkDestroyPipeline(LDevice,SimulatePipeline_VelocityUpd,Allocator);
     vkDestroyPipeline(LDevice,SimulatePipeline_VelocityCache,Allocator);
-    vkDestroyPipeline(LDevice,SimulatePipeline_VicosityCorr,Allocator);
+    vkDestroyPipeline(LDevice,SimulatePipeline_ViscosityCorr,Allocator);
     vkDestroyPipeline(LDevice,SimulatePipeline_VorticityCorr,Allocator);
     vkDestroyPipelineLayout(LDevice,SimulatePipelineLayout,Allocator);
 
@@ -679,7 +680,7 @@ void Renderer::CreateParticleBuffer()
         CreateBuffer(stagingbuffer,stagingmemory,size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         CreateBuffer(ParticleBuffers[i],ParticleBufferMemory[i],size,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         void* data;
         vkMapMemory(LDevice,stagingmemory,0,size,0,&data);
@@ -740,7 +741,7 @@ void Renderer::CreateRadixsortedIndexBuffer()
         CreateBuffer(stagingbuffer,stagingmemory,size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         CreateBuffer(RadixsortedIndexBuffer[i],RadixsortedIndexBufferMemory[i],size,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         void* data;
         vkMapMemory(LDevice,stagingmemory,0,size,0,&data);
@@ -879,7 +880,7 @@ void Renderer::CleanupSwapChain()
 void Renderer::RecreateSwapChain()
 {
     vkDeviceWaitIdle(LDevice);
-
+    bFramebufferResized = false;
     vkDestroyFramebuffer(LDevice,Framebuffer,Allocator);
 
     vkDestroyImageView(LDevice,DepthImageView,Allocator);
@@ -1616,15 +1617,15 @@ void Renderer::CreateComputePipeline()
         auto computershadermodule_positionupd = MakeShaderModule("shaders/spv/compshader_positionupd.spv");
         auto computershadermodule_velocityupd = MakeShaderModule("shaders/spv/compshader_velocityupd.spv");
         auto computershadermodule_velocitycache = MakeShaderModule("shaders/spv/compshader_velocitycache.spv");
-        auto computershadermodule_vicositycorr = MakeShaderModule("shaders/spv/compshader_vicositycorr.spv");
+        auto computershadermodule_viscositycorr = MakeShaderModule("shaders/spv/compshader_viscositycorr.spv");
         auto computershadermodule_vorticitycorr = MakeShaderModule("shaders/spv/compshader_vorticitycorr.spv");
 
         std::vector<VkShaderModule> shadermodules = {computershadermodule_euler,computershadermodule_lambda,computershadermodule_deltaposition,
         computershadermodule_positionupd,computershadermodule_velocityupd,computershadermodule_velocitycache,
-        computershadermodule_vicositycorr,computershadermodule_vorticitycorr};
+        computershadermodule_viscositycorr,computershadermodule_vorticitycorr};
         std::vector<VkPipeline*> pcomputepipelines = {&SimulatePipeline_Euler,&SimulatePipeline_Lambda,&SimulatePipeline_DeltaPosition,
         &SimulatePipeline_PositionUpd,&SimulatePipeline_VelocityUpd, 
-        &SimulatePipeline_VelocityCache,&SimulatePipeline_VicosityCorr, &SimulatePipeline_VorticityCorr};
+        &SimulatePipeline_VelocityCache,&SimulatePipeline_ViscosityCorr, &SimulatePipeline_VorticityCorr};
 
         for(uint32_t i=0;i<shadermodules.size();++i){
             VkPipelineShaderStageCreateInfo stageinfo{};
@@ -1796,7 +1797,7 @@ void Renderer::RecordSimulatingCommandBuffers()
 
         vkCmdPipelineBarrier(SimulatingCommandBuffers[i],VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
         ,0,nullptr,0,nullptr);
-        vkCmdBindPipeline(SimulatingCommandBuffers[i],VK_PIPELINE_BIND_POINT_COMPUTE,SimulatePipeline_VicosityCorr);
+        vkCmdBindPipeline(SimulatingCommandBuffers[i],VK_PIPELINE_BIND_POINT_COMPUTE,SimulatePipeline_ViscosityCorr);
         vkCmdDispatch(SimulatingCommandBuffers[i],WORK_GROUP_COUNT,1,1);  
 
         vkCmdPipelineBarrier(SimulatingCommandBuffers[i],VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
@@ -2143,19 +2144,6 @@ void Renderer::Draw()
         return;
     }
 
-}
-void Renderer::Test_GetSortedIndex(std::vector<int> &indexs)
-{
-    indexs.resize(0);
-    vkDeviceWaitIdle(LDevice);
-    void* data;
-    vkMapMemory(LDevice,RadixsortedIndexBufferMemory[0],0,sizeof(uint32_t)*particles.size(),0,&data);
-    int* intdata = reinterpret_cast<int*>(data);
-    for(uint32_t i=0;i<particles.size();++i){
-        indexs.push_back(intdata[i]);
-    }
-    vkUnmapMemory(LDevice,RadixsortedIndexBufferMemory[0]);
-    vkDeviceWaitIdle(LDevice);
 }
 
 void Renderer::WaitIdle()

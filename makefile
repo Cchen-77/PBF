@@ -12,7 +12,7 @@ SHADER_DIR:=${WORKSPACEFOLDER}/shaders
 COMPSHADER_PREFIX = ${SHADER_DIR}/spv/compshader
 SHADERS:=${COMPSHADER_PREFIX}_deltaposition.spv ${COMPSHADER_PREFIX}_euler.spv ${COMPSHADER_PREFIX}_filtering.spv ${COMPSHADER_PREFIX}_lambda.spv
 SHADERS+=${COMPSHADER_PREFIX}_positionupd.spv ${COMPSHADER_PREFIX}_postprocessing.spv ${COMPSHADER_PREFIX}_velocitycache.spv 
-SHADERS+=${COMPSHADER_PREFIX}_velocityupd.spv ${COMPSHADER_PREFIX}_vicositycorr.spv ${COMPSHADER_PREFIX}_vorticitycorr.spv
+SHADERS+=${COMPSHADER_PREFIX}_velocityupd.spv ${COMPSHADER_PREFIX}_viscositycorr.spv ${COMPSHADER_PREFIX}_vorticitycorr.spv
 
 SHADERS+=${SHADER_DIR}/spv/fragshader.spv ${SHADER_DIR}/spv/vertshader.spv
 
@@ -59,8 +59,8 @@ $(SHADER_DIR)/spv/compshader_velocityupd.spv:$(SHADER_DIR)/glsl/velocityupd.comp
 $(SHADER_DIR)/spv/compshader_vorticitycorr.spv:$(SHADER_DIR)/glsl/vorticitycorr.comp
 	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/vorticitycorr.comp -o $(SHADER_DIR)/spv/compshader_vorticitycorr.spv
 
-$(SHADER_DIR)/spv/compshader_vicositycorr.spv:$(SHADER_DIR)/glsl/vorticitycorr.comp
-	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/vicositycorr.comp -o $(SHADER_DIR)/spv/compshader_vicositycorr.spv
+$(SHADER_DIR)/spv/compshader_viscositycorr.spv:$(SHADER_DIR)/glsl/viscositycorr.comp
+	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/viscositycorr.comp -o $(SHADER_DIR)/spv/compshader_viscositycorr.spv
 
 $(SHADER_DIR)/spv/compshader_filtering.spv:$(SHADER_DIR)/glsl/filtering.comp
 	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/filtering.comp -o $(SHADER_DIR)/spv/compshader_filtering.spv
