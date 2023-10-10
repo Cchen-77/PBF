@@ -1,7 +1,7 @@
 #version 450
 layout(location=0) in vec3 inlocation;
 
-layout(location=0) flat out float outdepth;
+layout(location=0) flat out float outviewdepth;
 
 layout(binding=0) uniform UniformRenderingObject{
     float zNear;
@@ -12,23 +12,23 @@ layout(binding=0) uniform UniformRenderingObject{
     mat4 model;
     mat4 view;
     mat4 projection;
+    mat4 inv_projection;
 
     float particleRadius;
 };
 
 void main(){
     vec4 viewlocation = view*model*vec4(inlocation,1); 
-    vec4 location = projection*viewlocation;  
     
-    outdepth = -viewlocation.z;
+    outviewdepth = viewlocation.z;
 
-    gl_Position = location;
+    gl_Position = projection*viewlocation;
 
     float nearHeight = 2*zNear*tan(fovy/2);
 
     float scale = 800/nearHeight;
 
-    float nearSize = particleRadius*zNear/outdepth;
+    float nearSize = particleRadius*zNear/(-outviewdepth);
 
     gl_PointSize = 2*scale*nearSize;
   

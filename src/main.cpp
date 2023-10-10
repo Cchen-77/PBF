@@ -17,7 +17,7 @@
 int main(int argc,char** argv){
     
     try{
-        float radius = 0.01;
+        float radius = 0.008;
         float restDesity = 1000.0f;
         float diam = 2*radius;
 
@@ -28,6 +28,7 @@ int main(int argc,char** argv){
         renderingobj.view = glm::lookAt(glm::vec3(1.5,1.5,1.5),glm::vec3(0,0.5,0),glm::vec3(0,1,0));
         renderingobj.projection = glm::perspective(glm::radians(90.0f),1.0f,0.1f,3.0f);
         renderingobj.projection[1][1]*=-1;
+        renderingobj.inv_projection = glm::inverse(renderingobj.projection);
         renderingobj.zNear = 0.1f;
         renderingobj.zFar = 3.0f;
         renderingobj.aspect = 1;
@@ -38,15 +39,15 @@ int main(int argc,char** argv){
 
         UniformSimulatingObject simulatingobj{};
         simulatingobj.dt = 1/240.0f;
-        simulatingobj.restDensity = 1000.0f;
+        simulatingobj.restDensity = 1.0f/(diam*diam*diam);
         simulatingobj.sphRadius = 4*radius;
 
         simulatingobj.coffPoly6 = 315.0f/(64*PI*pow(simulatingobj.sphRadius,3));
         simulatingobj.coffGradSpiky = -45/(PI*pow(simulatingobj.sphRadius,4));
         simulatingobj.coffSpiky = 15/(PI*pow(simulatingobj.sphRadius,3));
 
-        simulatingobj.scorrK = 0.1;
-        simulatingobj.scorrQ = 0.1;
+        simulatingobj.scorrK = 0.001;
+        simulatingobj.scorrQ = 0.2;
         simulatingobj.scorrN = 4;
         renderer.SetSimulatingObj(simulatingobj);
         
@@ -61,7 +62,7 @@ int main(int argc,char** argv){
                     Particle particle{};
                     particle.Location = glm::vec3(x,y,z);
 
-                    particle.Mass = restDesity*diam*diam*diam;
+                    particle.Mass = 1;
                     particle.NumNgbrs = 0;
                     particles.push_back(particle);
                 }

@@ -16,6 +16,7 @@ struct Particle{
 };
 layout(binding=0) uniform SimulateObj{
     float dt;
+    float accumulated_t;
     float restDensity;
     float sphRadius;
     uint numParticles;
@@ -41,8 +42,8 @@ void main(){
     
     vec3 LocationStar = particlesOut[globalindex].Location + particlesOut[globalindex].DeltaLocation;
     vec3 DeltaLocation = particlesOut[globalindex].DeltaLocation;
-    float distLeft = LocationStar.x - 0;
-    float distRight = 1 - LocationStar.x;
+    float distLeft = LocationStar.x + 0.1;
+    float distRight = 1 - LocationStar.x - 0.4*sin(6*accumulated_t);
     float distFront = 1- LocationStar.z;
     float distBack = LocationStar.z;
     float distFloor = LocationStar.y;

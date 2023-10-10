@@ -65,7 +65,8 @@ struct UniformRenderingObject{
     alignas(16) glm::mat4 model = glm::mat4(1.0f);
     alignas(16) glm::mat4 view = glm::mat4(1.0f);
     alignas(16) glm::mat4 projection = glm::mat4(1.0f);
-
+    alignas(16) glm::mat4 inv_projection = glm::mat4(1.0f);
+    
     alignas(4) float particleRadius;
 };
 struct UniformSimulatingObject{

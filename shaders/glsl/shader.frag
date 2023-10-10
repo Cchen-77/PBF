@@ -2,7 +2,7 @@
 layout(location=0) out float outdepth;
 layout(location=1) out float outthickness;
 
-layout(location=0) flat in float indepth;
+layout(location=0) flat in float inviewdepth;
 
 layout(binding=0) uniform UniformRenderingObject{
     float zNear;
@@ -13,9 +13,10 @@ layout(binding=0) uniform UniformRenderingObject{
     mat4 model;
     mat4 view;
     mat4 projection;
+    mat4 inv_projection;
 
     float particleRadius;
-} ;
+};
 
 void main(){
     float radius = particleRadius;
@@ -25,12 +26,14 @@ void main(){
         return;
     }
     float l = radius*2*length(pos);
-    float depth = indepth - sqrt(radius*radius - l*l);
+    float viewdepth = inviewdepth + sqrt(radius*radius - l*l);
     
-    outdepth = depth;
+    vec4 temp = vec4(0,0,viewdepth,1);
+    
+    temp = projection*temp;
 
-    outthickness = 0;
+    outdepth = temp.z/temp.w;
 
-    //outthickness = 2*sqrt(radius*radius - l*l);
+    outthickness = 2*sqrt(radius*radius - l*l);
     
 }

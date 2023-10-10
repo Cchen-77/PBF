@@ -355,6 +355,7 @@ Renderer::~Renderer()
 void Renderer::Init()
 {
     glfwInit();
+    glfwWindowHint(GLFW_RESIZABLE,GLFW_FALSE);
     glfwWindowHint(GLFW_CLIENT_API,GLFW_NO_API);
     Window = glfwCreateWindow(Width,Height,"jason's renderer",nullptr,nullptr);
     glfwSetWindowUserPointer(Window,this);
