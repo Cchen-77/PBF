@@ -25,12 +25,12 @@ int main(int argc,char** argv){
 
         UniformRenderingObject renderingobj{};
         renderingobj.model = glm::mat4(1.0f);
-        renderingobj.view = glm::lookAt(glm::vec3(1.5,1.5,1.5),glm::vec3(0,0.5,0),glm::vec3(0,1,0));
-        renderingobj.projection = glm::perspective(glm::radians(90.0f),1.0f,0.1f,3.0f);
+        renderingobj.view = glm::lookAt(glm::vec3(1.5,1.3,1.5),glm::vec3(0,0.3,0),glm::vec3(0,1,0));
+        renderingobj.projection = glm::perspective(glm::radians(90.0f),1.0f,0.1f,10.0f);
         renderingobj.projection[1][1]*=-1;
         renderingobj.inv_projection = glm::inverse(renderingobj.projection);
         renderingobj.zNear = 0.1f;
-        renderingobj.zFar = 3.0f;
+        renderingobj.zFar = 10.0f;
         renderingobj.aspect = 1;
         renderingobj.fovy = glm::radians(90.0f);
         renderingobj.particleRadius = radius; 
@@ -46,14 +46,20 @@ int main(int argc,char** argv){
         simulatingobj.coffGradSpiky = -45/(PI*pow(simulatingobj.sphRadius,4));
         simulatingobj.coffSpiky = 15/(PI*pow(simulatingobj.sphRadius,3));
 
-        simulatingobj.scorrK = 0.001;
-        simulatingobj.scorrQ = 0.2;
+        simulatingobj.scorrK = 0.1;
+        simulatingobj.scorrQ = 0.1;
         simulatingobj.scorrN = 4;
         renderer.SetSimulatingObj(simulatingobj);
         
         UniformNSObject nsobj{};
         nsobj.sphRadius = 4*radius;
         renderer.SetNSObj(nsobj);
+
+        UniformBoxInfoObject boxinfoobj{};
+        boxinfoobj.clampX = glm::vec2{0,1};
+        boxinfoobj.clampY = glm::vec2{0,1};
+        boxinfoobj.clampZ = glm::vec2{0,1};
+        renderer.SetBoxinfoObj(boxinfoobj);
 
         std::vector<Particle> particles;
         for(float x=0.25;x<=0.75;x+=diam){
@@ -70,19 +76,22 @@ int main(int argc,char** argv){
         }
         renderer.SetParticles(particles);
 
-    
-
+        float accumulated_time = 0.0f;
         renderer.Init();
         auto now = std::chrono::high_resolution_clock::now();
-        for(int i=0;;++i){
+        for(;;){
             auto last = now;
             now = std::chrono::high_resolution_clock::now();
             float deltatime = std::chrono::duration<float,std::chrono::seconds::period>(now-last).count();
 
             float dt = std::clamp(deltatime,1/360.0f,1/30.0f);
+            accumulated_time += dt;
+
             simulatingobj.dt = dt;
-            simulatingobj.accumulated_t += dt;
             renderer.SetSimulatingObj(simulatingobj);
+
+            boxinfoobj.clampX.y = 1+0.5*glm::sin(4*accumulated_time);
+            renderer.SetBoxinfoObj(boxinfoobj);
             
             renderer.Simulate();
 

@@ -42,6 +42,7 @@ private:
     void CreateUniformRenderingBuffer();
     void CreateUniformSimulatingBuffer();
     void CreateUniformNSBuffer();
+    void CreateUniformBoxInfoBuffer();
 
     void CreateRadixsortedIndexBuffer();
     void CreateRSGlobalBucketBuffer();
@@ -50,7 +51,8 @@ private:
 
     void CreateDepthResources();
     void CreateThickResources();
-
+    void CreateDefaultTextureResources();
+    void CreateBackgroundResources();
 
     void CreateSwapChain();
     void CleanupSwapChain();
@@ -71,6 +73,7 @@ private:
     void CreateFramebuffers();
 
     void RecordSimulatingCommandBuffers();
+    
 
 private:
     void GetRequestInstaceExts(std::vector<const char*>& exts);
@@ -133,11 +136,17 @@ private:
     VkPipeline NSPipeline_FixcellBuffer;
     VkPipeline NSPipeline_GetNgbrs;
 
-    VkRenderPass GraphicRenderPass;
-    VkDescriptorSetLayout GraphicDescriptorSetLayout;
-    VkDescriptorSet GraphicDescriptorSet;
-    VkPipelineLayout GraphicPipelineLayout;
-    VkPipeline GraphicPipeline;
+    VkRenderPass FluidGraphicRenderPass;
+    VkDescriptorSetLayout FluidGraphicDescriptorSetLayout;
+    VkDescriptorSet FluidGraphicDescriptorSet;
+    VkPipelineLayout FluidGraphicPipelineLayout;
+    VkPipeline FluidGraphicPipeline;
+
+    VkRenderPass BoxGraphicRenderPass;
+    VkDescriptorSetLayout BoxGraphicDescriptorSetLayout;
+    VkDescriptorSet BoxGraphicDescriptorSet;
+    VkPipelineLayout BoxGraphicPipelineLayout;
+    VkPipeline BoxGraphicPipeline;
 
     VkDescriptorSetLayout SimulateDescriptorSetLayout;
     std::vector<VkDescriptorSet> SimulateDescriptorSet;
@@ -180,6 +189,11 @@ private:
     VkDeviceMemory UniformNSBufferMemory;
     void* MappedNSBuffer;
 
+    VkBuffer UniformBoxInfoBuffer;
+    VkDeviceMemory UniformBoxInfoBufferMemory;
+    void* MappedBoxInfoBuffer;
+
+
     VkImage ThickImage;
     VkDeviceMemory ThickImageMemory;
     VkImageView ThickImageView;
@@ -199,7 +213,18 @@ private:
     VkImageView FilteredDepthImageView;
     VkSampler FilteredDepthImageSampler;
 
-    VkFramebuffer Framebuffer;
+    VkImage DefaultTextureImage;
+    VkDeviceMemory DefaultTextureImageMemory;
+    VkImageView DefaultTextureImageView;
+    VkSampler DefaultTextureImageSampler;
+
+    VkImage BackgroundImage;
+    VkDeviceMemory BackgroundImageMemory;
+    VkImageView BackgroundImageView;
+    VkSampler BackgroundImageSampler;
+
+    VkFramebuffer FluidsFramebuffer;
+    VkFramebuffer BoxFramebuffer;
 
     std::vector<VkBuffer> ParticleBuffers;
     std::vector<VkDeviceMemory> ParticleBufferMemory;
@@ -219,6 +244,9 @@ private:
     VkBuffer CellinfoBuffer;
     VkDeviceMemory CellinfoBufferMemory;
 
+    VkBuffer BoxVertexBuffer;
+    VkDeviceMemory BoxVertexBufferMemory;
+
     std::vector<VkCommandBuffer> SimulatingCommandBuffers;
 
 
@@ -226,6 +254,7 @@ public:
     void SetRenderingObj(const UniformRenderingObject& robj);
     void SetSimulatingObj(const UniformSimulatingObject& sobj);
     void SetNSObj(const UniformNSObject& nobj);
+    void SetBoxinfoObj(const UniformBoxInfoObject& bobj);
     void SetParticles(const std::vector<Particle>& ps);
 private:
     
@@ -237,6 +266,7 @@ private:
     UniformNSObject nsobject{};
     UniformRenderingObject renderingobj{};
     UniformSimulatingObject simulatingobj{};
+    UniformBoxInfoObject boxinfobj{};
 
     bool bEnableValidation = false;
     uint32_t CurrentFlight = 0;

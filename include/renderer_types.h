@@ -92,5 +92,9 @@ struct UniformNSObject{
 
     alignas(4) float sphRadius;
 };
-
+struct UniformBoxInfoObject{
+    alignas(8) glm::vec2 clampX;
+    alignas(8) glm::vec2 clampY;
+    alignas(8) glm::vec2 clampZ; 
+};
 #endif

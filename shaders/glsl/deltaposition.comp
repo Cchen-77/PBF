@@ -79,12 +79,10 @@ void main(){
     for(uint i=0;i<particlesOut[globalindex].NumNgbrs;++i){
        uint ngbr = particleNgbrs[128*globalindex+i];
        vec3 r = particlesOut[globalindex].Location - particlesOut[ngbr].Location;
-       float wdiff = abs(W_Spiky(r,sphRadius)/W_Spiky(vec3(scorrQ*sphRadius,0,0),sphRadius));
+       float wdiff = abs(W_Poly6(r,sphRadius)/W_Poly6(vec3(scorrQ*sphRadius,0,0),sphRadius));
        float scorr = -scorrK*pow(wdiff,scorrN)/restDensity;
        particlesOut[globalindex].DeltaLocation += (particlesOut[globalindex].Lambda + particlesOut[ngbr].Lambda + scorr)
                                                 *Grad_W_Spiky(r,sphRadius);
     }
     particlesOut[globalindex].DeltaLocation /= restDensity;
-
-
 }

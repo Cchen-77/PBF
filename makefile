@@ -6,7 +6,7 @@ SRCS:=$(wildcard ${WORKSPACEFOLDER}/src/*.cpp)
 INCLUDES:=$(wildcard ${WORKSPACEFOLDER}/include/*.h)
 
 INCLUDE_DIRS:=/I${WORKSPACEFOLDER}/include /IC:\Libraries\glfw-3.3.8.bin.WIN64\include /I${VULKAN_SDK}/Include
-INCLUDE_DIRS+=/IC:\Libraries\tinyobjloader /IC:\Libraries\oneapi-tbb-2021.10.0\include
+INCLUDE_DIRS+=/IC:\Libraries\tinyobjloader /IC:\Libraries\oneapi-tbb-2021.10.0\include /IC:\Libraries\StbLibrary
 
 SHADER_DIR:=${WORKSPACEFOLDER}/shaders
 COMPSHADER_PREFIX = ${SHADER_DIR}/spv/compshader
@@ -14,7 +14,8 @@ SHADERS:=${COMPSHADER_PREFIX}_deltaposition.spv ${COMPSHADER_PREFIX}_euler.spv $
 SHADERS+=${COMPSHADER_PREFIX}_positionupd.spv ${COMPSHADER_PREFIX}_postprocessing.spv ${COMPSHADER_PREFIX}_velocitycache.spv 
 SHADERS+=${COMPSHADER_PREFIX}_velocityupd.spv ${COMPSHADER_PREFIX}_viscositycorr.spv ${COMPSHADER_PREFIX}_vorticitycorr.spv
 
-SHADERS+=${SHADER_DIR}/spv/fragshader.spv ${SHADER_DIR}/spv/vertshader.spv
+SHADERS+=${SHADER_DIR}/spv/fluidfragshader.spv ${SHADER_DIR}/spv/fluidvertshader.spv
+SHADERS+=${SHADER_DIR}/spv/boxfragshader.spv ${SHADER_DIR}/spv/boxvertshader.spv
 
 SHADERS+=${COMPSHADER_PREFIX}_calcellhash.spv ${COMPSHADER_PREFIX}_radixsort1.spv ${COMPSHADER_PREFIX}_radixsort2.spv ${COMPSHADER_PREFIX}_radixsort3.spv
 SHADERS+=${COMPSHADER_PREFIX}_fixcellbuffer.spv ${COMPSHADER_PREFIX}_getngbrs.spv
@@ -31,12 +32,19 @@ all:${BUILD_DIR}/main.exe ${SHADERS}
 ${BUILD_DIR}/main.exe:${SRCS} ${INCLUDES}
 	@echo ${SRCS}
 	@cl /std:c++17 /EHsc /Zi /Fo${BUILD_DIR}/ /Fe${BUILD_DIR}/main /Fd${BUILD_DIR}/main.pdb ${INCLUDE_DIRS} ${MACROS} ${SRCS} ${LIBS}
-	
-$(SHADER_DIR)/spv/vertshader.spv:$(SHADER_DIR)/glsl/shader.vert
-	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/shader.vert -o $(SHADER_DIR)/spv/vertshader.spv
 
-$(SHADER_DIR)/spv/fragshader.spv:$(SHADER_DIR)/glsl/shader.frag
-	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/shader.frag -o $(SHADER_DIR)/spv/fragshader.spv
+
+$(SHADER_DIR)/spv/boxvertshader.spv:$(SHADER_DIR)/glsl/boxshader.vert
+	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/boxshader.vert -o $(SHADER_DIR)/spv/boxvertshader.spv
+
+$(SHADER_DIR)/spv/boxfragshader.spv:$(SHADER_DIR)/glsl/boxshader.frag
+	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/boxshader.frag -o $(SHADER_DIR)/spv/boxfragshader.spv
+
+$(SHADER_DIR)/spv/fluidvertshader.spv:$(SHADER_DIR)/glsl/fluidshader.vert
+	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/fluidshader.vert -o $(SHADER_DIR)/spv/fluidvertshader.spv
+
+$(SHADER_DIR)/spv/fluidfragshader.spv:$(SHADER_DIR)/glsl/fluidshader.frag
+	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/fluidshader.frag -o $(SHADER_DIR)/spv/fluidfragshader.spv
 
 $(SHADER_DIR)/spv/compshader_lambda.spv:$(SHADER_DIR)/glsl/lambda.comp
 	@${VULKAN_SDK}/Bin/glslc.exe $(SHADER_DIR)/glsl/lambda.comp -o $(SHADER_DIR)/spv/compshader_lambda.spv
