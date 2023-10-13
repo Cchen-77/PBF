@@ -212,6 +212,7 @@ void Renderer::UpdateDescriptorSet()
         VkDescriptorImageInfo thickimageinfo{};
         VkDescriptorImageInfo depthimageinfo{};
         VkDescriptorImageInfo dstimageinfo{};
+        VkDescriptorImageInfo backgroundimageinfo{};
         thickimageinfo.imageView = ThickImageView;
         thickimageinfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         thickimageinfo.sampler = ThickImageSampler;
@@ -220,8 +221,11 @@ void Renderer::UpdateDescriptorSet()
         depthimageinfo.sampler = FilteredDepthImageSampler;
         dstimageinfo.imageView = SwapChainImageViews[i];
         dstimageinfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        backgroundimageinfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        backgroundimageinfo.imageView = BackgroundImageView;
+        backgroundimageinfo.sampler = BackgroundImageSampler;
 
-        std::array<VkWriteDescriptorSet,3> writes{};
+        std::array<VkWriteDescriptorSet,4> writes{};
         writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].descriptorCount = 1;
         writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -242,9 +246,17 @@ void Renderer::UpdateDescriptorSet()
         writes[2].descriptorCount = 1;
         writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         writes[2].dstArrayElement = 0;
-        writes[2].dstBinding = 3;
+        writes[2].dstBinding = 4;
         writes[2].dstSet = PostprocessDescriptorSets[i];
         writes[2].pImageInfo = &dstimageinfo;
+
+        writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[3].descriptorCount = 1;
+        writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[3].dstArrayElement = 0;
+        writes[3].dstBinding = 3;
+        writes[3].dstSet = PostprocessDescriptorSets[i];
+        writes[3].pImageInfo = &backgroundimageinfo;
 
         vkUpdateDescriptorSets(LDevice,static_cast<uint32_t>(writes.size()),writes.data(),0,nullptr);
     }
@@ -412,6 +424,8 @@ void Renderer::Init()
     CreateFramebuffers(); 
 
     RecordSimulatingCommandBuffers();
+    RecordFluidsRenderingCommandBuffers();
+    RecordBoxRenderingCommandBuffers();
 
     Initialized = true;
 }
@@ -420,6 +434,9 @@ void Renderer::Cleanup()
     vkDeviceWaitIdle(LDevice);
 
     vkFreeCommandBuffers(LDevice,CommandPool,MAXInFlightRendering,SimulatingCommandBuffers.data());
+    for(uint32_t i=0;i<2;++i)
+        vkFreeCommandBuffers(LDevice,CommandPool,SwapChainImages.size(),FluidsRenderingCommandBuffers[i].data());
+    vkFreeCommandBuffers(LDevice,CommandPool,1,&BoxRenderingCommandBuffer);
     
     vkDestroyPipeline(LDevice,NSPipeline_CalcellHash,Allocator);
     vkDestroyPipeline(LDevice,NSPipeline_Radixsort1,Allocator);
@@ -560,14 +577,11 @@ void Renderer::CreateSupportObjects(){
     if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&ImageAvaliable)!=VK_SUCCESS){
         throw std::runtime_error("failed to create sem:imageavaliable!");
     }
-    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&RenderingFinish)!=VK_SUCCESS){
-        throw std::runtime_error("failed to create sem:renderingfinish!");
+    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&FluidsRenderingFinish)!=VK_SUCCESS){
+        throw std::runtime_error("failed to create sem:fluidsrenderingfinish!");
     }
-    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&FilteringFinish)!=VK_SUCCESS){
+    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&BoxRenderingFinish)!=VK_SUCCESS){
         throw std::runtime_error("failed to create sem:filteringfinish!");
-    }
-    if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&DepthNThickAvaliable)!=VK_SUCCESS){
-        throw std::runtime_error("failed to create sem:depthnthickavaliable!");
     }
     if(vkCreateSemaphore(LDevice,&seminfo,Allocator,&SimulatingFinish)!=VK_SUCCESS){
         throw std::runtime_error("failed to create sem:simulatingfinsh!");
@@ -583,9 +597,8 @@ void Renderer::CreateSupportObjects(){
 void Renderer::CleanupSupportObjects()
 {
     vkDestroySemaphore(LDevice,ImageAvaliable,Allocator);
-    vkDestroySemaphore(LDevice,RenderingFinish,Allocator);
-    vkDestroySemaphore(LDevice,FilteringFinish,Allocator);
-    vkDestroySemaphore(LDevice,DepthNThickAvaliable,Allocator);
+    vkDestroySemaphore(LDevice,FluidsRenderingFinish,Allocator);
+    vkDestroySemaphore(LDevice,BoxRenderingFinish,Allocator);
     vkDestroySemaphore(LDevice,SimulatingFinish,Allocator);
     vkDestroyFence(LDevice,DrawingFence,Allocator);
     
@@ -988,6 +1001,7 @@ void Renderer::RecreateSwapChain()
     vkDeviceWaitIdle(LDevice);
     bFramebufferResized = false;
     vkDestroyFramebuffer(LDevice,FluidsFramebuffer,Allocator);
+    vkDestroyFramebuffer(LDevice,BoxFramebuffer,Allocator);
 
     vkDestroyImageView(LDevice,DepthImageView,Allocator);
     vkDestroyImage(LDevice,DepthImage,Allocator);
@@ -1008,10 +1022,16 @@ void Renderer::RecreateSwapChain()
     vkDestroyImage(LDevice,FilteredDepthImage,Allocator);
     vkFreeMemory(LDevice,FilteredDepthImageMemory,Allocator);
 
+    vkDestroySampler(LDevice,BackgroundImageSampler,Allocator);
+    vkDestroyImageView(LDevice,BackgroundImageView,Allocator);
+    vkDestroyImage(LDevice,BackgroundImage,Allocator);
+    vkFreeMemory(LDevice,BackgroundImageMemory,Allocator);
+
     CleanupSwapChain();
     CreateSwapChain();
     CreateDepthResources();
     CreateThickResources();
+    CreateBackgroundResources();
     CreateFramebuffers();
 
     UpdateDescriptorSet();
@@ -1041,7 +1061,7 @@ void Renderer::CreateDescriptorSetLayout()
         bindings[0].binding = 0;
         bindings[0].descriptorCount = 1;
         bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
 
         bindings[1].binding = 1;
         bindings[1].descriptorCount = 1;
@@ -1100,7 +1120,7 @@ void Renderer::CreateDescriptorSetLayout()
         }
     }
     {
-        std::array<VkDescriptorSetLayoutBinding,4> bindings{};
+        std::array<VkDescriptorSetLayoutBinding,5> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorCount = 1;
@@ -1119,8 +1139,14 @@ void Renderer::CreateDescriptorSetLayout()
 
         bindings[3].binding = 3;
         bindings[3].descriptorCount = 1;
-        bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        bindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;   
+        bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        bindings[4].binding = 4;
+        bindings[4].descriptorCount = 1;
+        bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;   
+
 
         VkDescriptorSetLayoutCreateInfo createinfo{};
         createinfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1791,7 +1817,7 @@ void Renderer::CreateGraphicPipeline()
     thickblendattachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
     thickblendattachment.colorBlendOp = VK_BLEND_OP_ADD;
     thickblendattachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    thickblendattachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    thickblendattachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
     thickblendattachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     thickblendattachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
 
@@ -1804,11 +1830,8 @@ void Renderer::CreateGraphicPipeline()
     fluidcolorblend.pAttachments = fluidcolorblendattachments.data();
 
     VkPipelineColorBlendAttachmentState boxcolorblendattachment{};
-    boxcolorblendattachment.blendEnable = VK_TRUE;
-    boxcolorblendattachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
-    boxcolorblendattachment.colorBlendOp = VK_BLEND_OP_MIN;
-    boxcolorblendattachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    boxcolorblendattachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    boxcolorblendattachment.blendEnable = VK_FALSE;
+    boxcolorblendattachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT;
 
     VkPipelineColorBlendStateCreateInfo boxcolorblend{};
     boxcolorblend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -2109,7 +2132,7 @@ void Renderer::RecordSimulatingCommandBuffers()
 
         vkCmdBindDescriptorSets(SimulatingCommandBuffers[i],VK_PIPELINE_BIND_POINT_COMPUTE,SimulatePipelineLayout,0,1,&SimulateDescriptorSet[i],0,nullptr);
 
-        for(int iter=0;iter<4;++iter){
+        for(int iter=0;iter<3;++iter){
             vkCmdPipelineBarrier(SimulatingCommandBuffers[i],VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&memorybarrier
             ,0,nullptr,0,nullptr);
             vkCmdBindPipeline(SimulatingCommandBuffers[i],VK_PIPELINE_BIND_POINT_COMPUTE,SimulatePipeline_Lambda);
@@ -2155,6 +2178,173 @@ void Renderer::RecordSimulatingCommandBuffers()
             throw std::runtime_error("failed to end simulating command buffer!");
         }
     }
+}
+void Renderer::RecordFluidsRenderingCommandBuffers()
+{
+    for(uint32_t i=0;i<2;++i){
+        FluidsRenderingCommandBuffers[i].resize(SwapChainImages.size());
+    }
+    for(uint32_t pframe=0;pframe<2;++pframe){
+        for(uint32_t img_idx=0;img_idx<SwapChainImages.size();++img_idx){
+
+            auto& cb = FluidsRenderingCommandBuffers[pframe][img_idx];
+            VkCommandBufferAllocateInfo allocateinfo{};
+            allocateinfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            allocateinfo.commandPool = CommandPool;
+            allocateinfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocateinfo.commandBufferCount = 1;
+            if(vkAllocateCommandBuffers(LDevice,&allocateinfo,&cb)!=VK_SUCCESS){
+                throw std::runtime_error("failed to allocate fluids rendering command buffer!");
+            }
+            VkCommandBufferBeginInfo begininfo{};
+            begininfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begininfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+            if(vkBeginCommandBuffer(cb,&begininfo)!=VK_SUCCESS){
+                throw std::runtime_error("failed to begin fluids rendering command buffer!");
+            }
+
+            VkRenderPassBeginInfo renderpass_begininfo{};
+            renderpass_begininfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderpass_begininfo.framebuffer = FluidsFramebuffer;
+            std::array<VkClearValue,2> clearvalues{};
+            clearvalues[0].color = {{0,0,0,0}};
+            clearvalues[1].color = {{1000,0,0,0}};
+            renderpass_begininfo.clearValueCount = static_cast<uint32_t>(clearvalues.size());
+            renderpass_begininfo.pClearValues = clearvalues.data();
+            renderpass_begininfo.renderPass = FluidGraphicRenderPass;
+            renderpass_begininfo.renderArea.extent = SwapChainImageExtent;
+            renderpass_begininfo.renderArea.offset = {0,0};
+            vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,FluidGraphicPipelineLayout,0,1,&FluidGraphicDescriptorSet,0,nullptr);
+            vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,FluidGraphicPipeline);
+            vkCmdBeginRenderPass(cb,&renderpass_begininfo,VK_SUBPASS_CONTENTS_INLINE);
+            
+            VkViewport viewport;
+            viewport.height = SwapChainImageExtent.height;
+            viewport.width = SwapChainImageExtent.width;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            viewport.x = viewport.y = 0;
+            VkRect2D scissor;
+            scissor.offset = {0,0};
+            scissor.extent = SwapChainImageExtent;
+            vkCmdSetViewport(cb,0,1,&viewport);
+            vkCmdSetScissor(cb,0,1,&scissor);
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(cb,0,1,&ParticleBuffers[pframe],&offset);
+            
+            vkCmdDraw(cb,particles.size(),1,0,0);
+            vkCmdEndRenderPass(cb);
+
+            VkImageMemoryBarrier imagebarrier{};
+            imagebarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            imagebarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imagebarrier.subresourceRange.baseArrayLayer = 0;
+            imagebarrier.subresourceRange.baseMipLevel = 0;
+            imagebarrier.subresourceRange.layerCount = 1;
+            imagebarrier.subresourceRange.levelCount = 1;
+            VkMemoryBarrier memorybarrier{};
+            memorybarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+
+
+            memorybarrier.srcAccessMask = 0;
+            memorybarrier.dstAccessMask = 0;
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,0,1,&memorybarrier,0,nullptr,0,nullptr);
+
+            //DEPTH TEXTURE FILTERING
+            imagebarrier.image = FilteredDepthImage;
+            imagebarrier.srcAccessMask = 0;
+            imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            imagebarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            imagebarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
+
+            vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_COMPUTE,FilterPipeline);
+            vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_COMPUTE,FilterPipelineLayout,0,1,&FilterDescriptorSet,0,nullptr);
+            vkCmdDispatch(cb,SwapChainImageExtent.width/4,SwapChainImageExtent.height/4,1);
+            imagebarrier.image = FilteredDepthImage;
+            imagebarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            imagebarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            imagebarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
+            
+            vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_COMPUTE,PostprocessPipeline);
+            vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_COMPUTE,PostprocessPipelineLayout,0,1,&PostprocessDescriptorSets[img_idx],0,nullptr);
+            imagebarrier.image = SwapChainImages[img_idx];
+            imagebarrier.srcAccessMask = 0;
+            imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            imagebarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            imagebarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
+            vkCmdDispatch(cb,SwapChainImageExtent.width/4,SwapChainImageExtent.height/4,1);
+
+            imagebarrier.image = SwapChainImages[img_idx];
+            imagebarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            imagebarrier.dstAccessMask = 0;
+            imagebarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            imagebarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            vkCmdPipelineBarrier(cb,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
+
+            auto result = vkEndCommandBuffer(cb);
+            if(result != VK_SUCCESS){
+                throw std::runtime_error("failed to end fluids rendering command buffer!");
+            }
+        }
+    }
+}
+void Renderer::RecordBoxRenderingCommandBuffers()
+{
+    VkCommandBufferAllocateInfo allocateinfo{};
+    allocateinfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocateinfo.commandPool = CommandPool;
+    allocateinfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocateinfo.commandBufferCount = 1;
+    if(vkAllocateCommandBuffers(LDevice,&allocateinfo,&BoxRenderingCommandBuffer)!=VK_SUCCESS){
+        throw std::runtime_error("failed to allocate box rendering command buffer!");
+    }
+    VkCommandBufferBeginInfo begininfo{};
+    begininfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begininfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    if(vkBeginCommandBuffer(BoxRenderingCommandBuffer,&begininfo)!=VK_SUCCESS){
+        throw std::runtime_error("failed to begin box rendering command buffer!");
+    }
+    VkRenderPassBeginInfo renderpass_begininfo{};
+    renderpass_begininfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    std::array<VkClearValue,2> clearvalues{};
+    clearvalues[0] = {{0,0,0,0}};
+    clearvalues[1].depthStencil = {1};
+    renderpass_begininfo.clearValueCount = static_cast<uint32_t>(clearvalues.size());
+    renderpass_begininfo.pClearValues = clearvalues.data();
+    renderpass_begininfo.framebuffer = BoxFramebuffer;
+    renderpass_begininfo.renderArea.extent = SwapChainImageExtent;
+    renderpass_begininfo.renderArea.offset = {0,0};
+    renderpass_begininfo.renderPass = BoxGraphicRenderPass;
+    
+    vkCmdBindDescriptorSets(BoxRenderingCommandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,BoxGraphicPipelineLayout,0,1,&BoxGraphicDescriptorSet,0,nullptr);
+    vkCmdBindPipeline(BoxRenderingCommandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,BoxGraphicPipeline);
+    vkCmdBeginRenderPass(BoxRenderingCommandBuffer,&renderpass_begininfo,VK_SUBPASS_CONTENTS_INLINE);
+    
+    VkViewport viewport;
+    viewport.height = SwapChainImageExtent.height;
+    viewport.width = SwapChainImageExtent.width;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    viewport.x = viewport.y = 0;
+    VkRect2D scissor;
+    scissor.offset = {0,0};
+    scissor.extent = SwapChainImageExtent;
+    vkCmdSetViewport(BoxRenderingCommandBuffer,0,1,&viewport);
+    vkCmdSetScissor(BoxRenderingCommandBuffer,0,1,&scissor);
+
+    vkCmdDraw(BoxRenderingCommandBuffer,18,1,0,0);
+    vkCmdEndRenderPass(BoxRenderingCommandBuffer);
+
+    auto result = vkEndCommandBuffer(BoxRenderingCommandBuffer);
+    if(result != VK_SUCCESS){
+        throw std::runtime_error("failed to end box rendering command buffer!");
+    }
+
 }
 void Renderer::GetRequestInstaceExts(std::vector<const char *> &exts)
 {
@@ -2335,6 +2525,36 @@ void Renderer::Simulate()
         throw std::runtime_error("failed to submit simulating command buffer!");
     }
 }
+void Renderer::BoxRender(uint32_t dstimage)
+{
+    VkSubmitInfo rendering_submitinfo{};
+    rendering_submitinfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    rendering_submitinfo.commandBufferCount = 1;
+    rendering_submitinfo.pCommandBuffers = &BoxRenderingCommandBuffer;
+    rendering_submitinfo.waitSemaphoreCount = 0;
+    rendering_submitinfo.pSignalSemaphores = &BoxRenderingFinish;
+    rendering_submitinfo.signalSemaphoreCount = 1;
+    if(vkQueueSubmit(GraphicNComputeQueue,1,&rendering_submitinfo,VK_NULL_HANDLE)!=VK_SUCCESS){
+        throw std::runtime_error("failed to submit box rendering command buffer!");
+    }
+}
+void Renderer::FluidsRender(uint32_t dstimage)
+{
+    VkSubmitInfo rendering_submitinfo{};
+    rendering_submitinfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    rendering_submitinfo.commandBufferCount = 1;
+    rendering_submitinfo.pCommandBuffers = &FluidsRenderingCommandBuffers[CurrentFlight][dstimage];
+    std::array<VkSemaphore,3> rendering_waitsems = {ImageAvaliable,SimulatingFinish,BoxRenderingFinish};
+    std::array<VkPipelineStageFlags,3> rendering_waitstages = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT};
+    rendering_submitinfo.waitSemaphoreCount = static_cast<uint32_t>(rendering_waitsems.size());
+    rendering_submitinfo.pWaitSemaphores = rendering_waitsems.data();
+    rendering_submitinfo.pWaitDstStageMask = rendering_waitstages.data();
+    rendering_submitinfo.pSignalSemaphores = &FluidsRenderingFinish;
+    rendering_submitinfo.signalSemaphoreCount = 1;
+    if(vkQueueSubmit(GraphicNComputeQueue,1,&rendering_submitinfo,DrawingFence)!=VK_SUCCESS){
+        throw std::runtime_error("failed to submit fluids rendering command buffer!");
+    }
+}
 void Renderer::Draw()
 {
     uint64_t notimeout = UINT64_MAX;
@@ -2345,118 +2565,16 @@ void Renderer::Draw()
     vkWaitForFences(LDevice,1,&DrawingFence,VK_TRUE,notimeout);
     vkResetFences(LDevice,1,&DrawingFence);
 
-    result = vkAcquireNextImageKHR(LDevice,SwapChain,notimeout,ImageAvaliable,VK_NULL_HANDLE,&image_idx);
+    result = vkAcquireNextImageKHR(LDevice,SwapChain,notimeout,ImageAvaliable,VK_NULL_HANDLE,&image_idx);   
 
-    auto cb_graphic = CreateCommandBuffer();
-    VkRenderPassBeginInfo renderpass_begininfo{};
-    renderpass_begininfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderpass_begininfo.framebuffer = FluidsFramebuffer;
-    std::array<VkClearValue,2> clearvalues{};
-    clearvalues[0].color = {{0,0,0,0}};
-    clearvalues[1].color = {{1000,0,0,0}};
-    renderpass_begininfo.clearValueCount = static_cast<uint32_t>(clearvalues.size());
-    renderpass_begininfo.pClearValues = clearvalues.data();
-    renderpass_begininfo.renderPass = FluidGraphicRenderPass;
-    renderpass_begininfo.renderArea.extent = SwapChainImageExtent;
-    renderpass_begininfo.renderArea.offset = {0,0};
-    vkCmdBindDescriptorSets(cb_graphic,VK_PIPELINE_BIND_POINT_GRAPHICS,FluidGraphicPipelineLayout,0,1,&FluidGraphicDescriptorSet,0,nullptr);
-    vkCmdBindPipeline(cb_graphic,VK_PIPELINE_BIND_POINT_GRAPHICS,FluidGraphicPipeline);
-    vkCmdBeginRenderPass(cb_graphic,&renderpass_begininfo,VK_SUBPASS_CONTENTS_INLINE);
-    
-    VkViewport viewport;
-    viewport.height = SwapChainImageExtent.height;
-    viewport.width = SwapChainImageExtent.width;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    viewport.x = viewport.y = 0;
-    VkRect2D scissor;
-    scissor.offset = {0,0};
-    scissor.extent = SwapChainImageExtent;
-    vkCmdSetViewport(cb_graphic,0,1,&viewport);
-    vkCmdSetScissor(cb_graphic,0,1,&scissor);
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cb_graphic,0,1,&ParticleBuffers[CurrentFlight],&offset);
-    
-    vkCmdDraw(cb_graphic,particles.size(),1,0,0);
-    vkCmdEndRenderPass(cb_graphic);
-
-    VkSubmitInfo graphic_submitinfo{};    
-    graphic_submitinfo.pSignalSemaphores = &DepthNThickAvaliable;;
-    graphic_submitinfo.signalSemaphoreCount = 1;
-    std::array<VkPipelineStageFlags,1> waitstages = {VK_PIPELINE_STAGE_VERTEX_INPUT_BIT};
-    std::array<VkSemaphore,1> waitsems = {SimulatingFinish};
-    graphic_submitinfo.waitSemaphoreCount = static_cast<uint32_t>(waitsems.size());
-    graphic_submitinfo.pWaitSemaphores = waitsems.data();
-    graphic_submitinfo.pWaitDstStageMask = waitstages.data();
-
-    SubmitCommandBuffer(cb_graphic,graphic_submitinfo,VK_NULL_HANDLE,GraphicNComputeQueue);
-
-    auto cb_compute = CreateCommandBuffer();
-
-    VkImageMemoryBarrier imagebarrier{};
-    imagebarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imagebarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imagebarrier.subresourceRange.baseArrayLayer = 0;
-    imagebarrier.subresourceRange.baseMipLevel = 0;
-    imagebarrier.subresourceRange.layerCount = 1;
-    imagebarrier.subresourceRange.levelCount = 1;
-    VkMemoryBarrier memorybarrier{};
-    memorybarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-
-    //DEPTH TEXTURE FILTERING
-
-    imagebarrier.image = FilteredDepthImage;
-    imagebarrier.srcAccessMask = 0;
-    imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    imagebarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imagebarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
-
-    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,FilterPipeline);
-    vkCmdBindDescriptorSets(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,FilterPipelineLayout,0,1,&FilterDescriptorSet,0,nullptr);
-    vkCmdDispatch(cb_compute,SwapChainImageExtent.width/4,SwapChainImageExtent.height/4,1);
-    imagebarrier.image = FilteredDepthImage;
-    imagebarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    imagebarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imagebarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
-    
-    vkCmdBindPipeline(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,PostprocessPipeline);
-    vkCmdBindDescriptorSets(cb_compute,VK_PIPELINE_BIND_POINT_COMPUTE,PostprocessPipelineLayout,0,1,&PostprocessDescriptorSets[image_idx],0,nullptr);
-    imagebarrier.image = SwapChainImages[image_idx];
-    imagebarrier.srcAccessMask = 0;
-    imagebarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    imagebarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imagebarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    vkCmdPipelineBarrier(cb_compute,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
-    vkCmdDispatch(cb_compute,SwapChainImageExtent.width/4,SwapChainImageExtent.height/4,1);
-
-    VkSubmitInfo compute_submitinfo{};
-    std::array<VkSemaphore,2> comp_waitsems = {ImageAvaliable,DepthNThickAvaliable};
-    std::array<VkPipelineStageFlags,2> comp_waitstages = {VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT};
-    compute_submitinfo.waitSemaphoreCount = static_cast<uint32_t>(comp_waitsems.size());
-    compute_submitinfo.pWaitSemaphores = comp_waitsems.data();
-    compute_submitinfo.pWaitDstStageMask = comp_waitstages.data();
-    compute_submitinfo.pSignalSemaphores = &RenderingFinish;
-    compute_submitinfo.signalSemaphoreCount = 1;
-    SubmitCommandBuffer(cb_compute,compute_submitinfo,DrawingFence,GraphicNComputeQueue);
-
-    auto cb_present = CreateCommandBuffer();
-    imagebarrier.image = SwapChainImages[image_idx];
-    imagebarrier.srcAccessMask = 0;
-    imagebarrier.dstAccessMask = 0;
-    imagebarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    imagebarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    vkCmdPipelineBarrier(cb_present,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,0,0,nullptr,0,nullptr,1,&imagebarrier);
-    VkSubmitInfo present_submitinfo{};
-    SubmitCommandBuffer(cb_present,present_submitinfo,VK_NULL_HANDLE,PresentQueue);
+    BoxRender(image_idx);
+    FluidsRender(image_idx);
 
     VkPresentInfoKHR presentinfo{};
     presentinfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentinfo.swapchainCount = 1;
     presentinfo.pSwapchains = &SwapChain;
-    presentinfo.pWaitSemaphores = &RenderingFinish;
+    presentinfo.pWaitSemaphores = &FluidsRenderingFinish;
     presentinfo.waitSemaphoreCount = 1;
     presentinfo.pImageIndices = &image_idx;
     result = vkQueuePresentKHR(PresentQueue,&presentinfo);
@@ -2464,7 +2582,6 @@ void Renderer::Draw()
         RecreateSwapChain();
         return;
     }
-
 }
 
 void Renderer::WaitIdle()

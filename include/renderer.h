@@ -22,6 +22,8 @@ public:
     void Cleanup();
 public:
     void Simulate();
+    void BoxRender(uint32_t dstimage);
+    void FluidsRender(uint32_t dstimage);
     void Draw();
 public:
     void WaitIdle();
@@ -73,7 +75,8 @@ private:
     void CreateFramebuffers();
 
     void RecordSimulatingCommandBuffers();
-    
+    void RecordFluidsRenderingCommandBuffers();
+    void RecordBoxRenderingCommandBuffers();
 
 private:
     void GetRequestInstaceExts(std::vector<const char*>& exts);
@@ -172,9 +175,8 @@ private:
 
     VkFence DrawingFence;
     VkSemaphore ImageAvaliable;
-    VkSemaphore DepthNThickAvaliable;
-    VkSemaphore RenderingFinish;
-    VkSemaphore FilteringFinish;
+    VkSemaphore FluidsRenderingFinish;
+    VkSemaphore BoxRenderingFinish;
     VkSemaphore SimulatingFinish;
 
     VkBuffer UniformRenderingBuffer;
@@ -248,8 +250,8 @@ private:
     VkDeviceMemory BoxVertexBufferMemory;
 
     std::vector<VkCommandBuffer> SimulatingCommandBuffers;
-
-
+    std::vector<VkCommandBuffer> FluidsRenderingCommandBuffers[2];
+    VkCommandBuffer BoxRenderingCommandBuffer;
 public:
     void SetRenderingObj(const UniformRenderingObject& robj);
     void SetSimulatingObj(const UniformSimulatingObject& sobj);

@@ -80,7 +80,7 @@ void main(){
        uint ngbr = particleNgbrs[128*globalindex+i];
        vec3 r = particlesOut[globalindex].Location - particlesOut[ngbr].Location;
        float wdiff = abs(W_Poly6(r,sphRadius)/W_Poly6(vec3(scorrQ*sphRadius,0,0),sphRadius));
-       float scorr = -scorrK*pow(wdiff,scorrN)/restDensity;
+       float scorr = -scorrK*pow(wdiff,scorrN);
        particlesOut[globalindex].DeltaLocation += (particlesOut[globalindex].Lambda + particlesOut[ngbr].Lambda + scorr)
                                                 *Grad_W_Spiky(r,sphRadius);
     }

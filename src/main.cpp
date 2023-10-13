@@ -46,7 +46,7 @@ int main(int argc,char** argv){
         simulatingobj.coffGradSpiky = -45/(PI*pow(simulatingobj.sphRadius,4));
         simulatingobj.coffSpiky = 15/(PI*pow(simulatingobj.sphRadius,3));
 
-        simulatingobj.scorrK = 0.1;
+        simulatingobj.scorrK = 0.0001;
         simulatingobj.scorrQ = 0.1;
         simulatingobj.scorrN = 4;
         renderer.SetSimulatingObj(simulatingobj);
@@ -56,9 +56,12 @@ int main(int argc,char** argv){
         renderer.SetNSObj(nsobj);
 
         UniformBoxInfoObject boxinfoobj{};
-        boxinfoobj.clampX = glm::vec2{0,1};
+        boxinfoobj.clampX = glm::vec2{0,1.2};
         boxinfoobj.clampY = glm::vec2{0,1};
         boxinfoobj.clampZ = glm::vec2{0,1};
+        boxinfoobj.clampX_still = glm::vec2{0,1.2};
+        boxinfoobj.clampY_still = glm::vec2{0,1};
+        boxinfoobj.clampZ_still = glm::vec2{0,1};
         renderer.SetBoxinfoObj(boxinfoobj);
 
         std::vector<Particle> particles;
@@ -84,13 +87,13 @@ int main(int argc,char** argv){
             now = std::chrono::high_resolution_clock::now();
             float deltatime = std::chrono::duration<float,std::chrono::seconds::period>(now-last).count();
 
-            float dt = std::clamp(deltatime,1/360.0f,1/30.0f);
+            float dt = std::clamp(deltatime,1/360.0f,1/60.0f);
             accumulated_time += dt;
 
             simulatingobj.dt = dt;
             renderer.SetSimulatingObj(simulatingobj);
 
-            boxinfoobj.clampX.y = 1+0.5*glm::sin(4*accumulated_time);
+            boxinfoobj.clampX.y = 1.2+0.2*(glm::cos(5*accumulated_time)-1);
             renderer.SetBoxinfoObj(boxinfoobj);
             
             renderer.Simulate();

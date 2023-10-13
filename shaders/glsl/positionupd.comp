@@ -36,6 +36,10 @@ layout(binding=4) uniform Boxinfo{
     vec2 boxClampX;
     vec2 boxClampY;
     vec2 boxClampZ;
+
+    vec2 clampX_still;
+    vec2 clampY_still;
+    vec2 clampZ_still; 
 };
 layout(local_size_x=512,local_size_y=1,local_size_z=1) in;
 
@@ -68,7 +72,7 @@ void main(){
     }
     float radius = sphRadius/4;
     if(walldist - radius <-1e-6){
-        DeltaLocation += 1.5*(radius-walldist)*wallnormal;
+        DeltaLocation += 1.6*(radius-walldist)*wallnormal;
     }
     particlesOut[globalindex].Location += DeltaLocation;
 }

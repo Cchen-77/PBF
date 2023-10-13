@@ -14,36 +14,34 @@ void main(){
     float v = (outcoord.y + 0.5)/imagesize.y;
 
     float depth = texture(old_depthtexture,vec2(u,v)).r;
+    int r = 10;
+    float wsum = 0;
+    float sum = 0;
+    for(float dx=-r;dx<=r;++dx){
+        for(float dy=-r;dy<=r;++dy){
 
-    // int r = 10;
-    // float wsum = 0;
-    // float sum = 0;
-    // for(float dx=-r;dx<=r;++dx){
-    //     for(float dy=-r;dy<=r;++dy){
-
-    //         float u_d = u + dx/imagesize.x;
-    //         float v_d = v + dy/imagesize.y;
-    //         float d_d;
-    //         if(u_d<0||u_d>1||v_d<0||v_d>1)
-    //         {
-    //             d_d = 1000;
-    //         }
-    //         else{
-    //             d_d = texture(old_depthtexture,vec2(u_d,v_d)).r;
-    //         }
+            float u_d = u + dx/imagesize.x;
+            float v_d = v + dy/imagesize.y;
+            float d_d;
+            if(u_d<0||u_d>1||v_d<0||v_d>1)
+            {
+                d_d = 1000;
+            }
+            else{
+                d_d = texture(old_depthtexture,vec2(u_d,v_d)).r;
+            }
             
-    //         float coeff_c = -0.1*(dx*dx+dy*dy);
+            float coeff_c = -0.2*(dx*dx+dy*dy);
 
-    //         float coeff_s = -0.1*(depth-d_d)*(depth-d_d);
+            float coeff_s = -10000*(depth-d_d)*(depth-d_d);
 
-    //         float coeff = exp(coeff_c+coeff_s);
+            float coeff = exp(coeff_c+coeff_s);
 
-    //         wsum += coeff;
-    //         sum += coeff*d_d;
-    //     }
-    // }
-    // sum/=wsum;
-
-
+            wsum += coeff;
+            sum += coeff*d_d;
+        }
+    }
+    sum/=wsum;
+    depth = sum;
     imageStore(filtered_depthtexture,outcoord,vec4(depth,0,0,0));
 }

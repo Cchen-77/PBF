@@ -96,5 +96,9 @@ struct UniformBoxInfoObject{
     alignas(8) glm::vec2 clampX;
     alignas(8) glm::vec2 clampY;
     alignas(8) glm::vec2 clampZ; 
+
+    alignas(8) glm::vec2 clampX_still;
+    alignas(8) glm::vec2 clampY_still;
+    alignas(8) glm::vec2 clampZ_still; 
 };
 #endif

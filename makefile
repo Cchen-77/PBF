@@ -30,7 +30,6 @@ MACROS:=/D DEBUG
 all:${BUILD_DIR}/main.exe ${SHADERS}
 
 ${BUILD_DIR}/main.exe:${SRCS} ${INCLUDES}
-	@echo ${SRCS}
 	@cl /std:c++17 /EHsc /Zi /Fo${BUILD_DIR}/ /Fe${BUILD_DIR}/main /Fd${BUILD_DIR}/main.pdb ${INCLUDE_DIRS} ${MACROS} ${SRCS} ${LIBS}
 
 
