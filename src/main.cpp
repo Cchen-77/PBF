@@ -56,10 +56,10 @@ int main(int argc,char** argv){
         renderer.SetNSObj(nsobj);
 
         UniformBoxInfoObject boxinfoobj{};
-        boxinfoobj.clampX = glm::vec2{0,1.2};
+        boxinfoobj.clampX = glm::vec2{0,1.5};
         boxinfoobj.clampY = glm::vec2{0,1};
         boxinfoobj.clampZ = glm::vec2{0,1};
-        boxinfoobj.clampX_still = glm::vec2{0,1.2};
+        boxinfoobj.clampX_still = glm::vec2{0,1.5};
         boxinfoobj.clampY_still = glm::vec2{0,1};
         boxinfoobj.clampZ_still = glm::vec2{0,1};
         renderer.SetBoxinfoObj(boxinfoobj);
@@ -93,7 +93,7 @@ int main(int argc,char** argv){
             simulatingobj.dt = dt;
             renderer.SetSimulatingObj(simulatingobj);
 
-            boxinfoobj.clampX.y = 1.2+0.2*(glm::cos(5*accumulated_time)-1);
+            boxinfoobj.clampX.y = 1+0.25*(1-glm::cos(5*accumulated_time));
             renderer.SetBoxinfoObj(boxinfoobj);
             
             renderer.Simulate();

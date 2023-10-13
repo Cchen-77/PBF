@@ -34,6 +34,6 @@ void main(){
 
     outdepth = temp.z/temp.w;
 
-    outthickness = 2*sqrt(radius*radius - l*l);
+    outthickness = 4*sqrt(radius*radius - l*l);
     
 }

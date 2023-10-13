@@ -81,23 +81,19 @@ void main(){
        uint ngbr = particleNgbrs[128*globalindex+i];
        particlesOut[globalindex].Density += W_Poly6(particlesOut[globalindex].Location - particlesOut[ngbr].Location,sphRadius);
     }
-    float Constraint = max(0.0f,(particlesOut[globalindex].Density/restDensity) - 1);
-    if(Constraint == 0){
-        particlesOut[globalindex].Lambda = 0;
+    float Constraint = particlesOut[globalindex].Density/restDensity - 1;
+    float eps = 1e4;
+    float denominator = 0;
+    vec3 gradi = {0,0,0};
+    for(uint i=0;i<particlesOut[globalindex].NumNgbrs;++i){
+        uint ngbr = particleNgbrs[128*globalindex+i];
+        vec3 gradj = Grad_W_Spiky(particlesOut[globalindex].Location - particlesOut[ngbr].Location,sphRadius)/restDensity;
+        gradi += gradj;
+        denominator += dot(gradj,gradj);
     }
-    else{
-        float eps = 1e4;
-        float denominator = 0;
-        vec3 gradi = {0,0,0};
-        for(uint i=0;i<particlesOut[globalindex].NumNgbrs;++i){
-            uint ngbr = particleNgbrs[128*globalindex+i];
-            vec3 gradj = Grad_W_Spiky(particlesOut[globalindex].Location - particlesOut[ngbr].Location,sphRadius)/restDensity;
-            gradi += gradj;
-            denominator += dot(gradj,gradj);
-        }
-        denominator += dot(gradi,gradi);
-        denominator += eps;
-        particlesOut[globalindex].Lambda = -Constraint/denominator;
-    }
+    denominator += dot(gradi,gradi);
+    denominator += eps;
+    particlesOut[globalindex].Lambda = -Constraint/denominator;
+
 
 }

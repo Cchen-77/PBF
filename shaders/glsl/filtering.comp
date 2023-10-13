@@ -31,9 +31,9 @@ void main(){
                 d_d = texture(old_depthtexture,vec2(u_d,v_d)).r;
             }
             
-            float coeff_c = -0.2*(dx*dx+dy*dy);
+            float coeff_c = -0.1*(dx*dx+dy*dy);
 
-            float coeff_s = -10000*(depth-d_d)*(depth-d_d);
+            float coeff_s = -(depth-d_d)*(depth-d_d);
 
             float coeff = exp(coeff_c+coeff_s);
 

@@ -97,6 +97,6 @@ void main(){
     vec3 N = vec3(length(omega_dx)-omega_length,length(omega_dy)-omega_length,length(omega_dz)-omega_length);
     N = normalize(N);
     if(isnan(N.x) || isnan(N.y) || isnan(N.z)) return;
-    vec3 force = 1e-8*cross(N,omega);
+    vec3 force = 5e-8*cross(N,omega);
     particlesOut[particleindex].Velocity += force*dt;
 }
