@@ -81,6 +81,7 @@ void main(){
        uint ngbr = particleNgbrs[128*globalindex+i];
        particlesOut[globalindex].Density += W_Poly6(particlesOut[globalindex].Location - particlesOut[ngbr].Location,sphRadius);
     }
+    particlesOut[globalindex].Density +=W_Poly6(vec3(0.0f),sphRadius);
     float Constraint = particlesOut[globalindex].Density/restDensity - 1;
     float eps = 1e4;
     float denominator = 0;

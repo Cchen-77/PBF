@@ -56,10 +56,10 @@ int main(int argc,char** argv){
         renderer.SetNSObj(nsobj);
 
         UniformBoxInfoObject boxinfoobj{};
-        boxinfoobj.clampX = glm::vec2{0,1.5};
+        boxinfoobj.clampX = glm::vec2{0,1};
         boxinfoobj.clampY = glm::vec2{0,1};
         boxinfoobj.clampZ = glm::vec2{0,1};
-        boxinfoobj.clampX_still = glm::vec2{0,1.5};
+        boxinfoobj.clampX_still = glm::vec2{0,1};
         boxinfoobj.clampY_still = glm::vec2{0,1};
         boxinfoobj.clampZ_still = glm::vec2{0,1};
         renderer.SetBoxinfoObj(boxinfoobj);
