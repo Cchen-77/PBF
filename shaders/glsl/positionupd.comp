@@ -71,7 +71,7 @@ void main(){
         }
     }
     float radius = sphRadius/4;
-    if(walldist - radius <-1e-6){
+    if(walldist < radius){
         DeltaLocation += (radius-walldist)*wallnormal;
     }
     particlesOut[globalindex].Location += DeltaLocation;
