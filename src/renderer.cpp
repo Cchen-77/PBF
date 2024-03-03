@@ -857,7 +857,7 @@ void Renderer::CreateThickResources()
 void Renderer::CreateDefaultTextureResources()
 {
     int texWidth,texHeight,texChannels;
-    stbi_uc* pixels = stbi_load("textures/default_texture.png",&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load("resources/textures/default_texture.png",&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
     uint32_t size = texWidth*texHeight*4;
     VkBuffer stagingbuffer;
     VkDeviceMemory stagingbuffermemory;
@@ -1705,8 +1705,8 @@ void Renderer::CreateGraphicPipelineLayout()
 }
 void Renderer::CreateGraphicPipeline()
 {
-    auto fluidvertshadermodule = MakeShaderModule("shaders/spv/fluidvertshader.spv");
-    auto fluidfragshadermodule = MakeShaderModule("shaders/spv/fluidfragshader.spv");
+    auto fluidvertshadermodule = MakeShaderModule("resources/shaders/spv/fluidvertshader.spv");
+    auto fluidfragshadermodule = MakeShaderModule("resources/shaders/spv/fluidfragshader.spv");
     VkPipelineShaderStageCreateInfo fluidvertshader{};
     fluidvertshader.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fluidvertshader.module = fluidvertshadermodule;
@@ -1719,8 +1719,8 @@ void Renderer::CreateGraphicPipeline()
     fluidfragshader.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     std::array<VkPipelineShaderStageCreateInfo,2> fluidshaderstages = {fluidvertshader,fluidfragshader};
 
-    auto boxvertshadermodule = MakeShaderModule("shaders/spv/boxvertshader.spv");
-    auto boxfragshadermodule = MakeShaderModule("shaders/spv/boxfragshader.spv");
+    auto boxvertshadermodule = MakeShaderModule("resources/shaders/spv/boxvertshader.spv");
+    auto boxfragshadermodule = MakeShaderModule("resources/shaders/spv/boxfragshader.spv");
     VkPipelineShaderStageCreateInfo boxvertshader{};
     boxvertshader.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     boxvertshader.module = boxvertshadermodule;
@@ -1924,12 +1924,12 @@ void Renderer::CreateComputePipeline()
 {
     {
         //NGBR PIPELINES
-        auto computeshadermodule_calcellhash = MakeShaderModule("shaders/spv/compshader_calcellhash.spv");
-        auto computeshadermodule_radixsort1 = MakeShaderModule("shaders/spv/compshader_radixsort1.spv");
-        auto computeshadermodule_radixsort2 = MakeShaderModule("shaders/spv/compshader_radixsort2.spv");
-        auto computeshadermodule_radixsort3 = MakeShaderModule("shaders/spv/compshader_radixsort3.spv");
-        auto computeshadermodule_fixcellbuffer = MakeShaderModule("shaders/spv/compshader_fixcellbuffer.spv");
-        auto computeshadermodule_getngbrs = MakeShaderModule("shaders/spv/compshader_getngbrs.spv");
+        auto computeshadermodule_calcellhash = MakeShaderModule("resources/shaders/spv/compshader_calcellhash.spv");
+        auto computeshadermodule_radixsort1 = MakeShaderModule("resources/shaders/spv/compshader_radixsort1.spv");
+        auto computeshadermodule_radixsort2 = MakeShaderModule("resources/shaders/spv/compshader_radixsort2.spv");
+        auto computeshadermodule_radixsort3 = MakeShaderModule("resources/shaders/spv/compshader_radixsort3.spv");
+        auto computeshadermodule_fixcellbuffer = MakeShaderModule("resources/shaders/spv/compshader_fixcellbuffer.spv");
+        auto computeshadermodule_getngbrs = MakeShaderModule("resources/shaders/spv/compshader_getngbrs.spv");
 
         std::vector<VkShaderModule> shadermodules = {computeshadermodule_calcellhash,computeshadermodule_radixsort1,computeshadermodule_radixsort2,
         computeshadermodule_radixsort3,computeshadermodule_fixcellbuffer,computeshadermodule_getngbrs};
@@ -1958,14 +1958,14 @@ void Renderer::CreateComputePipeline()
 
     {
         //SIMULATING PIPELINES
-        auto computershadermodule_euler = MakeShaderModule("shaders/spv/compshader_euler.spv");
-        auto computershadermodule_lambda = MakeShaderModule("shaders/spv/compshader_lambda.spv");
-        auto computershadermodule_deltaposition = MakeShaderModule("shaders/spv/compshader_deltaposition.spv");
-        auto computershadermodule_positionupd = MakeShaderModule("shaders/spv/compshader_positionupd.spv");
-        auto computershadermodule_velocityupd = MakeShaderModule("shaders/spv/compshader_velocityupd.spv");
-        auto computershadermodule_velocitycache = MakeShaderModule("shaders/spv/compshader_velocitycache.spv");
-        auto computershadermodule_viscositycorr = MakeShaderModule("shaders/spv/compshader_viscositycorr.spv");
-        auto computershadermodule_vorticitycorr = MakeShaderModule("shaders/spv/compshader_vorticitycorr.spv");
+        auto computershadermodule_euler = MakeShaderModule("resources/shaders/spv/compshader_euler.spv");
+        auto computershadermodule_lambda = MakeShaderModule("resources/shaders/spv/compshader_lambda.spv");
+        auto computershadermodule_deltaposition = MakeShaderModule("resources/shaders/spv/compshader_deltaposition.spv");
+        auto computershadermodule_positionupd = MakeShaderModule("resources/shaders/spv/compshader_positionupd.spv");
+        auto computershadermodule_velocityupd = MakeShaderModule("resources/shaders/spv/compshader_velocityupd.spv");
+        auto computershadermodule_velocitycache = MakeShaderModule("resources/shaders/spv/compshader_velocitycache.spv");
+        auto computershadermodule_viscositycorr = MakeShaderModule("resources/shaders/spv/compshader_viscositycorr.spv");
+        auto computershadermodule_vorticitycorr = MakeShaderModule("resources/shaders/spv/compshader_vorticitycorr.spv");
 
         std::vector<VkShaderModule> shadermodules = {computershadermodule_euler,computershadermodule_lambda,computershadermodule_deltaposition,
         computershadermodule_positionupd,computershadermodule_velocityupd,computershadermodule_velocitycache,
@@ -1995,8 +1995,8 @@ void Renderer::CreateComputePipeline()
     }
     {
         //POSTPROCESSING PIPELINES
-        auto computershadermodule_postprocessing = MakeShaderModule("shaders/spv/compshader_postprocessing.spv");
-        auto computershadermodule_filtering = MakeShaderModule("shaders/spv/compshader_filtering.spv");
+        auto computershadermodule_postprocessing = MakeShaderModule("resources/shaders/spv/compshader_postprocessing.spv");
+        auto computershadermodule_filtering = MakeShaderModule("resources/shaders/spv/compshader_filtering.spv");
 
         VkPipelineShaderStageCreateInfo postprecessing_stageinfo{};
         postprecessing_stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;

@@ -1,0 +1,6 @@
+option(GLFW_BUILD_DOCS OFF)
+option(GLFW_BUILD_EXAMPLES OFF)
+option(GLFW_BUILD_TESTS OFF)
+option(GLFW_INSTALL ON)
+set(GLFW_LIBRARY_TYPE "STATIC")
+add_subdirectory(glfw)

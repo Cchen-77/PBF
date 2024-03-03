@@ -1,0 +1,9 @@
+[submodule "3rdparty/glfw"]
+	path = 3rdparty/glfw
+	url = git@github.com:glfw/glfw.git
+[submodule "3rdparty/tinyobjloader"]
+	path = 3rdparty/tinyobjloader
+	url = git@github.com:tinyobjloader/tinyobjloader.git
+[submodule "3rdparty/stb"]
+	path = 3rdparty/stb
+	url = git@github.com:nothings/stb.git

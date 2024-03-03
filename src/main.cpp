@@ -10,7 +10,6 @@
 
 #undef APIENTRY
 #define NOMINMAX
-#include"tbb/tbb.h"
 
 #define PI 3.1415926f
 
